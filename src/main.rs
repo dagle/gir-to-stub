@@ -7,11 +7,11 @@ use std::env;
 
     
 fn print_header(attribs: &AttributeMap<String, String>) {
-    println!("{:#?}", attribs);
+    // println!("{:#?}", attribs);
 }
 
 fn print_entry_type(attribs: &AttributeMap<String, String>) {
-    println!("{:#?}", attribs["name"]);
+    // println!("{:#?}", attribs["name"]);
 }
 
 fn print_enum(e: &Element, parentns: &str) {
@@ -69,26 +69,25 @@ fn filter(typ: &String) -> bool {
 // and not passed as an argument. Example a function apa(int a, err **Error) 
 // becomes apa(int) -> Error
 
-fn get_params(e: &Element, ns: &str) -> Option<Vec<String>> {
-    let mut ret: Vec<String> = vec![];
+fn get_params(e: &Element, ns: &str) -> Option<Vec<(String, String)>> {
+    let mut ret: Vec<(String, String)> = vec![];
     let e2 = e.get_child("parameters")?;
     for child in e2.children.iter() {
         match child {
             XMLNode::Element(e) => {
                 if e.name == "parameter" {
-                    let argname = &e.attributes["name"];
+                    let argname = e.attributes["name"].clone();
                     if let Some(e2) = e.get_child("type") {
                         let argtype = &e2.attributes.get("name")?;
                         if !filter(&argtype) {
-                            let string = format!("{}: {}", argname, translate(argtype, ns));
-                            ret.push(string);
+                            ret.push((argname, translate(argtype, ns)));
                         }
                     }
                 }
             }
             _ => {}
         }
-    }
+        }
     return Some(ret)
 }
 
@@ -104,9 +103,18 @@ fn print_args(args: Option<Vec<String>>) {
 fn print_ret(ret: Option<Vec<String>>) {
     if let Some(vec) = ret {
         let str = vec.join(", ");
-        println!(" -> {}", str)
+        print!(" -> {}", str)
     }
 }
+
+fn get_doc(e: &Element) -> Option<String> {
+    if let Some(doc) = e.get_child("doc") {
+        let txt = doc.get_text()?;
+        return Some(txt.into_owned())
+    }
+    None
+}
+
 
 fn callable(e: &Element, ns: &String, parentns: &str) {
     let name = &e.attributes["name"];
@@ -116,49 +124,76 @@ fn callable(e: &Element, ns: &String, parentns: &str) {
             return;
         }
     }
-    print!("{}.{}", ns, name);
     let args = get_params(&e, parentns);
-    print_args(args);
+
+    // ugly as hell
+    let call = format!("{}.{}({})", ns, name, 
+        args.map_or("".to_string(), |vec| vec.into_iter().map(|x| x.0).collect::<Vec<String>>().join(", ")));
+    // print!("{}({}){:<pad$}*{}*", call, ,
+    let len = call.len();
+    print!("{}   *{}.{}()*", call, ns, name);
+    // print_args(args);
     let ret = get_return(&e, parentns);
-    print_ret(ret);
+    // print_ret(ret);
+
+    println!("");
+    if let Some(doc) = get_doc(&e) {
+        println!("{}", doc);
+    }
+    println!("");
+}
+
+fn print_doc(e: &Element) {
+    println!("{}\n", e.get_text().unwrap_or("".into()));
 }
 
 fn print_class(parentns: &str, e: &Element) {
     // println!("{:#?}", e);
     let ns = &e.attributes["name"];
+    println!("{:=>76}", "=");
+    let class = format!("{}.{}", parentns, ns);
+    let len = class.len();
+
+    println!("{:<pad$} *{}*\n", class, class, pad=76-len-3);
     for node in e.children.iter() {
         match node {
             XMLNode::Element(ref e) => {
                 match e.name.as_str() {
-                    "doc" => {}
-                    "source-position" => {}
+                    "doc" => {
+                        // print_doc(e)
+                    }
+                    "field" => {
+                        // println!("{:#?}", e)
+                    }
+                    "source-position" => {
+                    }
                     "constructor" => {
                         let ns = format!("{}.{}", parentns, ns);
-                        callable(e, &ns, parentns);
+                        // callable(e, &ns, parentns);
                     }
                     "function" => {
                         let ns = format!("{}.{}", parentns, ns);
-                        callable(e, &ns, parentns);
+                        // callable(e, &ns, parentns);
                     }
                     "method" => {
                         let ns = ns.to_lowercase();
-                        callable(e, &ns, parentns);
+                        // callable(e, &ns, parentns);
                     }
                     "virtual-method" => { 
-                        // do we want these?
-                        // callable(e, ns);
-                    }
-                    "field" => {
-                        // parent stuff?
-                        // println!("{:#?}", e)
+                        let ns = ns.to_lowercase();
+                        // callable(e, &ns, parentns);
                     }
                     "property" => {
-
+                        // TODO
+                        // println!("{:#?}", e)
                     }
                     "signal" => {
+                        // TODO
+                        // println!("{:#?}", e)
                     }
                     "implements" => {
-
+                        // TODO
+                        println!("{:#?}", e)
                     }
                     name => {
                         panic!("Name: {} not matched against\n", name)
@@ -171,40 +206,53 @@ fn print_class(parentns: &str, e: &Element) {
 }
 
 fn print_macro(e: &Element) {
-    println!("{:#?}", e);
+    // println!("{:#?}", e);
 }
 
 // add namespace
 fn print_entry(parentns: &str, node: &XMLNode) {
+    let class = "";
     match node {
         XMLNode::Element(ref e) => {
+            // print classes first,
+            // then print functions,
+            // then macros
+            // then print the rest
             match e.name.as_str() {
-                "enumeration" => {
-                    print_enum(&e, parentns)
-                }
                 "class" => {
                     print_class(parentns, &e)
                 }
-                "function-macro" => {
-                    print_macro(&e)
-                }
                 "function" => {
-                    callable(e, &parentns.to_string(), parentns);
+                    // println!("{:=>76}", "=");
+                    // let class = format!("{}.{}", parentns, ns);
+                    // let len = class.len();
+
+                    // println!("{:<pad$} *{}*\n", class, class, pad=76-len-3);
+                    // callable(e, &parentns.to_string(), parentns);
+                }
+                "function-macro" => {
+                    // print_macro(&e)
+                    // only print if introspectable
+                    // println!("{:#?}", e)
+                }
+                "enumeration" => {
+                    // print_enum(&e, parentns)
                 }
                 "record" => {
                     // println!("{:#?}", e)
+                    // is-gtype-struct-for ? Is that the dynamic type check function?
                 }
                 "constant" => {
                     // println!("{:#?}", e)
                 }
                 "callback" => {
+                    // TODO
                     // println!("{:#?}", e)
                 }
                 "bitfield" => {
                     // println!("{:#?}", e)
                 }
                 "docsection" => {
-
                 }
                 "name" => {
                 }
@@ -213,7 +261,6 @@ fn print_entry(parentns: &str, node: &XMLNode) {
                 "interface" => {
                 }
                 "boxed" => {
-
                 }
                 name => {
                     panic!("Name: {} not matched against\n", name)
