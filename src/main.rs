@@ -2,35 +2,26 @@ mod vimdoc;
 use vimdoc::{Document, Function};
 use xmltree::Element;
 use xmltree::XMLNode;
-use std::collections::HashMap as AttributeMap;
-// use xmltree::AttributeMap;
 use std::fs::File;
 use std::env;
+use std::path::PathBuf;
 
 use crate::vimdoc::Class;
 
-    
-fn print_header(attribs: &AttributeMap<String, String>) {
-    // println!("{:#?}", attribs);
-}
-
-fn print_entry_type(attribs: &AttributeMap<String, String>) {
-    // println!("{:#?}", attribs["name"]);
-}
-
-fn get_enum(e: &Element, parentns: &str) -> Option<String> {
+fn get_enum(e: &Element, parentns: &str) -> Vec<String> {
+    let mut ret = vec![];
     let ns = &e.attributes["name"];
     for child in e.children.iter() {
         match child {
             XMLNode::Element(e) =>  {
                 if e.name == "member" {
-                   return Some(format!("{}.{}.{}", parentns, ns, e.attributes["name"].to_uppercase()))
+                   ret.push(format!("{}.{}.{}", parentns, ns, e.attributes["name"].to_uppercase()))
                 }
             }
             _ => {}
         }
     }
-    None
+    ret
 }
 
 fn translate(str: &str, ns: &str) -> String {
@@ -75,54 +66,46 @@ fn filter(typ: &String) -> bool {
 // becomes apa(int) -> Error
 
 fn get_params(e: &Element, ns: &str) -> Option<Vec<(String, String)>> {
+    // TODO Fix this one, it's really ugly.
     let mut ret: Vec<(String, String)> = vec![];
-    let e2 = e.get_child("parameters")?;
-    for child in e2.children.iter() {
-        match child {
-            XMLNode::Element(e) => {
-                if e.name == "parameter" {
-                    let argname = e.attributes["name"].clone();
-                    if let Some(e2) = e.get_child("type") {
-                        let argtype = &e2.attributes.get("name")?;
-                        if !filter(&argtype) {
-                            ret.push((argname, translate(argtype, ns)));
+    if let Some(e2) = e.get_child("parameters") {
+        for child in e2.children.iter() {
+            match child {
+                XMLNode::Element(e) => {
+                    if e.name == "parameter" {
+                        let argname = e.attributes["name"].clone();
+                        if let Some(e2) = e.get_child("type") {
+                            let argtype = &e2.attributes.get("name")?;
+                            if !filter(&argtype) {
+                                ret.push((argname, translate(argtype, ns)));
+                            }
                         }
                     }
                 }
+                _ => {}
             }
-            _ => {}
         }
     }
     return Some(ret)
 }
 
-fn get_doc2(e: &Element) -> Option<String> {
-    if let Some(doc) = e.get_child("doc") {
-        let txt = doc.get_text()?;
-        return Some(txt.into_owned())
-    }
-    None
+fn get_inner_doc(e: &Element) -> Option<String> {
+    e.get_child("doc").map(|doc| get_doc(doc)).flatten()
 }
 
-
 fn callable(e: &Element, parentns: &str) -> Option<Function> {
-    let name = e.attributes["name"];
+    let name = e.attributes.get("name")?;
     let intro = e.attributes.get("introspectable");
+    // TODO should be possible to do this
     if let Some(enabl) = intro {
         if enabl == "0" {
             return None
         }
     }
-    // What happens params arguments = 0? Does gir add 0 args? Same for ret
     let args = get_params(&e, parentns)?;
     let ret = get_return(&e, parentns)?;
-    let doc = get_doc2(&e);
-    Some(Function {
-        name,
-        doc,
-        args,
-        ret
-    })
+    let doc = get_inner_doc(&e);
+    Some(Function::new(name.to_string(), doc, args, ret))
 }
 
 fn get_doc(e: &Element) -> Option<String> {
@@ -214,11 +197,9 @@ fn get_global(doc: &mut Document, node: &XMLNode) {
                     }
                 }
                 "enumeration" => {
-                    // TODO
-                    if let Some(enu) = get_enum(&e, &doc.ns) {
+                    for enu in get_enum(&e, &doc.ns).into_iter() {
                         doc.add_enum(enu);
                     }
-
                 }
                 "record" => {
                     // println!("{:#?}", e)
@@ -253,41 +234,39 @@ fn get_global(doc: &mut Document, node: &XMLNode) {
     }
 }
 
-fn parse_toplevel(node: &XMLNode) {
+fn parse_toplevel(node: &XMLNode) -> Option<Document> {
     match node {
         XMLNode::Element(ref e) => {
             if e.name == "namespace" {
                 let ns = &e.attributes["name"];
                 let mut doc = Document::new(ns,
-                    "gtk.txt {gir generated documentation for gtk}",
-                    "oau");
-                // print_header(&e.attributes);
+                    "",
+                    "");
                 for node in e.children.iter() {
                     get_global(&mut doc, node)
                 }
+                return Some(doc);
             }
+            None
         }
-        _ => {}
+        _ => None
     }
 }
 
 fn main() {
     for arg in env::args().skip(1) {
-        let f = File::open(arg).expect("Can't read file");
+        let f = File::open(&arg).expect("Can't read file");
+        let mut out_file = PathBuf::from(&arg);
+        out_file.set_extension("txt");
+        let mut out = File::create(out_file).expect("Couldn't open output file");
 
         let names_element = Element::parse(f).unwrap();
 
-        // for name in names_element {
-        //
-        // }
         for child in names_element.children.into_iter() {
-            parse_toplevel(&child);
-        }
-        {
-            // get first `name` element
-            // name.attributes.insert("suffix".to_owned(), "mr".to_owned());
+            let doc = parse_toplevel(&child);
+            if let Some(doc) = doc {
+                doc.write(&mut out).expect("Couldn't write document to output file");
+            }
         }
     }
-    // names_element.write(File::create("result.xml").unwrap());
-
 }

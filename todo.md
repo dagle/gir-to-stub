@@ -1,2 +1,7 @@
-Add a vimdoc "module"
-Make it possible to generate different languages (and not just lua).
+- [ ] Make it possible to generate different languages (and not just lua).
+- [ ] Add header documentation
+- [x] Add missing enums
+- [x] Add missing constructors (or all functions with 0 args / no )
+- [ ] Fix TODO
+- [ ] Major cleanup (mostly in xml parsing)
+- [ ] Add tests
