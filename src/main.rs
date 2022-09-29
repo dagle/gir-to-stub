@@ -1,9 +1,13 @@
+mod vimdoc;
+use vimdoc::{Document, Function};
 use xmltree::Element;
 use xmltree::XMLNode;
 use std::collections::HashMap as AttributeMap;
 // use xmltree::AttributeMap;
 use std::fs::File;
 use std::env;
+
+use crate::vimdoc::Class;
 
     
 fn print_header(attribs: &AttributeMap<String, String>) {
@@ -14,18 +18,19 @@ fn print_entry_type(attribs: &AttributeMap<String, String>) {
     // println!("{:#?}", attribs["name"]);
 }
 
-fn print_enum(e: &Element, parentns: &str) {
+fn get_enum(e: &Element, parentns: &str) -> Option<String> {
     let ns = &e.attributes["name"];
     for child in e.children.iter() {
         match child {
             XMLNode::Element(e) =>  {
                 if e.name == "member" {
-                   println!("{}.{}.{}", parentns, ns, e.attributes["name"].to_uppercase()) 
+                   return Some(format!("{}.{}.{}", parentns, ns, e.attributes["name"].to_uppercase()))
                 }
             }
             _ => {}
         }
     }
+    None
 }
 
 fn translate(str: &str, ns: &str) -> String {
@@ -87,27 +92,11 @@ fn get_params(e: &Element, ns: &str) -> Option<Vec<(String, String)>> {
             }
             _ => {}
         }
-        }
+    }
     return Some(ret)
 }
 
-fn print_args(args: Option<Vec<String>>) {
-    if let Some(vec) = args {
-        let str = vec.join(", ");
-        print!("({})", str)
-    } else {
-        print!("()")
-    }
-}
-
-fn print_ret(ret: Option<Vec<String>>) {
-    if let Some(vec) = ret {
-        let str = vec.join(", ");
-        print!(" -> {}", str)
-    }
-}
-
-fn get_doc(e: &Element) -> Option<String> {
+fn get_doc2(e: &Element) -> Option<String> {
     if let Some(doc) = e.get_child("doc") {
         let txt = doc.get_text()?;
         return Some(txt.into_owned())
@@ -116,84 +105,75 @@ fn get_doc(e: &Element) -> Option<String> {
 }
 
 
-fn callable(e: &Element, ns: &String, parentns: &str) {
-    let name = &e.attributes["name"];
+fn callable(e: &Element, parentns: &str) -> Option<Function> {
+    let name = e.attributes["name"];
     let intro = e.attributes.get("introspectable");
     if let Some(enabl) = intro {
         if enabl == "0" {
-            return;
+            return None
         }
     }
-    let args = get_params(&e, parentns);
-
-    // ugly as hell
-    let call = format!("{}.{}({})", ns, name, 
-        args.map_or("".to_string(), |vec| vec.into_iter().map(|x| x.0).collect::<Vec<String>>().join(", ")));
-    // print!("{}({}){:<pad$}*{}*", call, ,
-    let len = call.len();
-    print!("{}   *{}.{}()*", call, ns, name);
-    // print_args(args);
-    let ret = get_return(&e, parentns);
-    // print_ret(ret);
-
-    println!("");
-    if let Some(doc) = get_doc(&e) {
-        println!("{}", doc);
-    }
-    println!("");
+    // What happens params arguments = 0? Does gir add 0 args? Same for ret
+    let args = get_params(&e, parentns)?;
+    let ret = get_return(&e, parentns)?;
+    let doc = get_doc2(&e);
+    Some(Function {
+        name,
+        doc,
+        args,
+        ret
+    })
 }
 
-fn print_doc(e: &Element) {
-    println!("{}\n", e.get_text().unwrap_or("".into()));
+fn get_doc(e: &Element) -> Option<String> {
+    e.get_text().map(|x| x.into())
 }
 
-fn print_class(parentns: &str, e: &Element) {
-    // println!("{:#?}", e);
+fn get_class(parentns: &str, e: &Element) -> Class {
     let ns = &e.attributes["name"];
-    println!("{:=>76}", "=");
-    let class = format!("{}.{}", parentns, ns);
-    let len = class.len();
-
-    println!("{:<pad$} *{}*\n", class, class, pad=76-len-3);
+    let mut class = Class::new(ns);
     for node in e.children.iter() {
         match node {
             XMLNode::Element(ref e) => {
                 match e.name.as_str() {
                     "doc" => {
-                        // print_doc(e)
+                        let docs = get_doc(&e);
+                        class.set_docs(docs);
                     }
                     "field" => {
+                        // TODO
                         // println!("{:#?}", e)
                     }
                     "source-position" => {
                     }
                     "constructor" => {
-                        let ns = format!("{}.{}", parentns, ns);
-                        // callable(e, &ns, parentns);
+                        if let Some(fun) = callable(e, parentns) {
+                            class.add_constructor(fun)
+                        }
                     }
                     "function" => {
-                        let ns = format!("{}.{}", parentns, ns);
-                        // callable(e, &ns, parentns);
+                        if let Some(fun) = callable(e, parentns) {
+                            class.add_function(fun)
+                        }
                     }
                     "method" => {
-                        let ns = ns.to_lowercase();
-                        // callable(e, &ns, parentns);
+                        if let Some(fun) = callable(e, parentns) {
+                            class.add_method(fun)
+                        }
                     }
                     "virtual-method" => { 
-                        let ns = ns.to_lowercase();
-                        // callable(e, &ns, parentns);
+                        if let Some(fun) = callable(e, parentns) {
+                            class.add_virtual(fun)
+                        }
                     }
                     "property" => {
                         // TODO
-                        // println!("{:#?}", e)
                     }
                     "signal" => {
                         // TODO
-                        // println!("{:#?}", e)
                     }
                     "implements" => {
                         // TODO
-                        println!("{:#?}", e)
                     }
                     name => {
                         panic!("Name: {} not matched against\n", name)
@@ -203,6 +183,7 @@ fn print_class(parentns: &str, e: &Element) {
             _ => {}
         }
     }
+    class
 }
 
 fn print_macro(e: &Element) {
@@ -210,8 +191,7 @@ fn print_macro(e: &Element) {
 }
 
 // add namespace
-fn print_entry(parentns: &str, node: &XMLNode) {
-    let class = "";
+fn get_global(doc: &mut Document, node: &XMLNode) {
     match node {
         XMLNode::Element(ref e) => {
             // print classes first,
@@ -220,23 +200,25 @@ fn print_entry(parentns: &str, node: &XMLNode) {
             // then print the rest
             match e.name.as_str() {
                 "class" => {
-                    print_class(parentns, &e)
+                    let class = get_class(&doc.ns, e);
+                    doc.add_class(class);
                 }
                 "function" => {
-                    // println!("{:=>76}", "=");
-                    // let class = format!("{}.{}", parentns, ns);
-                    // let len = class.len();
-
-                    // println!("{:<pad$} *{}*\n", class, class, pad=76-len-3);
-                    // callable(e, &parentns.to_string(), parentns);
+                    if let Some(fun) = callable(e, &doc.ns) {
+                        doc.add_function(fun)
+                    }
                 }
                 "function-macro" => {
-                    // print_macro(&e)
-                    // only print if introspectable
-                    // println!("{:#?}", e)
+                    if let Some(fun) = callable(e, &doc.ns) {
+                        doc.add_macro(fun)
+                    }
                 }
                 "enumeration" => {
-                    // print_enum(&e, parentns)
+                    // TODO
+                    if let Some(enu) = get_enum(&e, &doc.ns) {
+                        doc.add_enum(enu);
+                    }
+
                 }
                 "record" => {
                     // println!("{:#?}", e)
@@ -275,9 +257,13 @@ fn parse_toplevel(node: &XMLNode) {
     match node {
         XMLNode::Element(ref e) => {
             if e.name == "namespace" {
+                let ns = &e.attributes["name"];
+                let mut doc = Document::new(ns,
+                    "gtk.txt {gir generated documentation for gtk}",
+                    "oau");
                 // print_header(&e.attributes);
                 for node in e.children.iter() {
-                    print_entry(&e.attributes["name"], node)
+                    get_global(&mut doc, node)
                 }
             }
         }
