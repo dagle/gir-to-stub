@@ -3,6 +3,8 @@ use std::io::prelude::*;
 
 type Result<T> = std::io::Result<T>;
 
+// TODO add c-name to all fields?
+
 // add tabstop at bottom
 // reference |item|
 // `for parameters or filenames`
@@ -20,24 +22,54 @@ pub struct Document {
 }
 
 struct Global {
-    // ns?
+    // name: String,
     classes: Vec<Class>,
     functions: Vec<Function>,
     macros: Vec<Function>,
-    enums: Vec<String>,
-    record: Vec<String>,
-    constant: Vec<String>,
+    enums: Vec<Enum>,
+    record: Vec<Variable>,
+    constant: Vec<Variable>,
     callback: Vec<Function>,
     bitfield: Vec<String>,
-    // docsection: 
-    // name: 
+    // unions?
+    // docsection: Option<String>,
     // alias: 
     // interface: 
     // boxed: 
 }
 
-pub fn write_raw<W: Write>(raw: &str, w: &mut W) -> Result<()> {
-    writeln!(w, "{}", raw)
+type Entry = String;
+type Doc = String;
+
+#[derive(Debug)]
+pub struct Enum {
+    pub name: String,
+    pub doc: Doc,
+    pub members: Vec<(Entry, Doc)>
+}
+
+struct Union {
+    name: String,
+    variants: Vec<(String, Type)>
+}
+
+// change name, variable isn't a good name
+// we just want a common name for anything that
+// name and a type.
+#[derive(Debug)]
+pub struct Variable {
+    pub name: String,
+    pub doc: String,
+    pub rtype: String,
+}
+
+struct Alias {
+    oldname: String,
+    newname: String,
+}
+
+pub fn write_enum<W: Write>(e: &Enum, w: &mut W) -> Result<()> {
+    writeln!(w, "{}", e.name)
 }
 
 fn create_section<W: Write>(ns: &str, name: &str, w: &mut W) -> Result<()> {
@@ -55,7 +87,6 @@ impl Document {
             intro: intro.to_string(),
             global: Global::new(),
         }
-        
     }
     pub fn add_class(&mut self, class: Class) {
         self.global.classes.push(class);
@@ -66,8 +97,11 @@ impl Document {
     pub fn add_macro(&mut self, macr: Function) {
         self.global.macros.push(macr);
     }
-    pub fn add_enum(&mut self, enu: String) {
+    pub fn add_enum(&mut self, enu: Enum) {
         self.global.enums.push(enu);
+    }
+    pub fn add_constants(&mut self, var: Variable) {
+        self.global.constant.push(var);
     }
     pub fn write<W: Write>(&self, w: &mut W) -> Result<()> {
         let now: DateTime<Utc> = Utc::now();
@@ -104,7 +138,7 @@ impl Document {
             create_section(&self.ns, "Enums", w)?;
             writeln!(w, "")?;
             for enu in self.global.enums.iter() {
-                write_raw(enu, w)?;
+                write_enum(enu, w)?;
             }
         }
         writeln!(w, "")?;
@@ -137,6 +171,8 @@ pub struct Class {
     method: Vec<Function>,
     func: Vec<Function>,
     virt: Vec<Function>,
+    // c_name,
+
     // property: 
     // signal: 
     // implements: 
@@ -227,9 +263,11 @@ type Type = String;
 
 pub struct Function {
     name: String,
+    introspectable: bool,
     doc: Option<String>, // todo, doc should be a Vec<String>
     args: Vec<(String, Type)>,
     ret: Vec<Type>,
+    // c_name,
 }
 
 fn get_typeless(args: &Vec<(String, Type)>) -> Vec<String> {
@@ -249,9 +287,11 @@ fn write_doc<W: Write>(doc: &Option<String>, w: &mut W) -> Result<()> {
     Ok(())
 }
 impl Function {
-    pub fn new(name: String, doc: Option<String>, args: Vec<(String, Type)>, ret: Vec<Type>) -> Function {
+    pub fn new(name: String, intro: bool, doc: Option<String>, 
+        args: Vec<(String, Type)>, ret: Vec<Type>) -> Function {
         Function {
             name,
+            introspectable: intro,
             doc,
             args,
             ret,
