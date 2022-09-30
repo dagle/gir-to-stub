@@ -36,6 +36,9 @@ pub trait Langbinding {
     // We use only_introspectable to filter out what definitions are acceable
     // for the bindings. For example C can use all functions where lua can only 
     // use introspectable functions.
+    
+    fn write_static(&self, top_ns: &str, local_ns: Option<&str>, id: &str) -> String;
+    fn write_local(&self, top_ns: &str, local_ns: &str, id: &str) -> String;
     fn only_introspectable(&self) -> bool {
         true
     }

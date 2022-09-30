@@ -26,11 +26,11 @@ struct Global {
     classes: Vec<Class>,
     functions: Vec<Function>,
     macros: Vec<Function>,
-    enums: Vec<Enum>,
+    enums: Vec<Comp>,
     record: Vec<Variable>,
     constant: Vec<Variable>,
     callback: Vec<Function>,
-    bitfield: Vec<String>,
+    bitfield: Vec<Comp>,
     // unions?
     // docsection: Option<String>,
     // alias: 
@@ -42,7 +42,7 @@ type Entry = String;
 type Doc = String;
 
 #[derive(Debug)]
-pub struct Enum {
+pub struct Comp {
     pub name: String,
     pub doc: Doc,
     pub members: Vec<(Entry, Doc)>
@@ -68,7 +68,7 @@ struct Alias {
     newname: String,
 }
 
-pub fn write_enum<W: Write>(e: &Enum, w: &mut W) -> Result<()> {
+pub fn write_enum<W: Write>(e: &Comp, w: &mut W) -> Result<()> {
     writeln!(w, "{}", e.name)
 }
 
@@ -97,11 +97,17 @@ impl Document {
     pub fn add_macro(&mut self, macr: Function) {
         self.global.macros.push(macr);
     }
-    pub fn add_enum(&mut self, enu: Enum) {
+    pub fn add_enum(&mut self, enu: Comp) {
         self.global.enums.push(enu);
+    }
+    pub fn add_bitfield(&mut self, bf: Comp) {
+        self.global.bitfield.push(bf);
     }
     pub fn add_constants(&mut self, var: Variable) {
         self.global.constant.push(var);
+    }
+    pub fn add_callback(&mut self, cb: Function) {
+        self.global.callback.push(cb);
     }
     pub fn write<W: Write>(&self, w: &mut W) -> Result<()> {
         let now: DateTime<Utc> = Utc::now();
@@ -261,6 +267,7 @@ impl Class {
 
 type Type = String;
 
+#[derive(Debug)]
 pub struct Function {
     name: String,
     introspectable: bool,
