@@ -2,6 +2,7 @@
 - [ ] Add header documentation
 - [x] Add missing enums
 - [x] Add missing constructors (or all functions with 0 args / no )
+- [ ] Add version
 - [ ] Fix TODO
 - [ ] Major cleanup (mostly in xml parsing)
 - [ ] Add tests

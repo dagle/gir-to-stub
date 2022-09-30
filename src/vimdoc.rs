@@ -132,7 +132,7 @@ impl Global {
 pub struct Class {
     name: String,
     doc: Option<String>,
-    fields: Vec<String>,
+    fields: Vec<(String, String)>,
     constructor: Vec<Function>,
     method: Vec<Function>,
     func: Vec<Function>,
@@ -167,7 +167,7 @@ impl Class {
         if !self.fields.is_empty() {
             writeln!(w, "Fields~")?;
             for field in self.fields.iter() {
-                let str = format!("{}.{}", static_ns, field);
+                let str = format!("{}.{}", static_ns, field.0);
                 w.write_all(&str.as_bytes())?;
                 writeln!(w, "")?;
             }
@@ -214,6 +214,9 @@ impl Class {
     }
     pub fn add_function(&mut self, fun: Function) {
         self.func.push(fun);
+    }
+    pub fn add_field(&mut self, field: (String, String)) {
+        self.fields.push(field)
     }
     pub fn set_docs(&mut self, doc: Option<String>) {
         self.doc = doc;

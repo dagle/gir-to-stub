@@ -24,6 +24,7 @@ fn get_enum(e: &Element, parentns: &str) -> Vec<String> {
     ret
 }
 
+// move this to the lua/language
 fn translate(str: &str, ns: &str) -> String {
     match str {
         "utf8"|"const char*"|"char*" => "string".to_string(),
@@ -41,18 +42,22 @@ fn translate(str: &str, ns: &str) -> String {
 
 // both of these are kinda wrong, because error values etc
 fn get_return(e: &Element, ns: &str) -> Option<Vec<String>> {
-    let e2 = e.get_child("return-value")?;
-    if let Some(t) = e2.get_child("type") {
+    let ret = e.get_child("return-value")?;
+    if let Some(t) = ret.get_child("type") {
         let name = &t.attributes.get("name")?;
-        return Some(vec![translate(name, ns)])
+        return Some(vec![name.to_string()])
+        // return Some(vec![translate(name, ns)])
     }
-    if let Some(t) = e2.get_child("array") {
+    if let Some(t) = ret.get_child("array") {
         let name = &t.attributes.get("name")?;
-        return Some(vec![translate(name, ns)])
+        return Some(vec![name.to_string()])
+        // return Some(vec![translate(name, ns)])
     }
     None
 }
 
+// this should be more general and not equal for
+// all languages, and shouldn't be done here?
 fn filter(typ: &String) -> bool {
     match typ.as_ref() {
         "gpointer" => true,
@@ -66,24 +71,22 @@ fn filter(typ: &String) -> bool {
 // becomes apa(int) -> Error
 
 fn get_params(e: &Element, ns: &str) -> Option<Vec<(String, String)>> {
-    // TODO Fix this one, it's really ugly.
     let mut ret: Vec<(String, String)> = vec![];
-    if let Some(e2) = e.get_child("parameters") {
-        for child in e2.children.iter() {
-            match child {
-                XMLNode::Element(e) => {
-                    if e.name == "parameter" {
-                        let argname = e.attributes["name"].clone();
-                        if let Some(e2) = e.get_child("type") {
-                            let argtype = &e2.attributes.get("name")?;
-                            if !filter(&argtype) {
-                                ret.push((argname, translate(argtype, ns)));
-                            }
-                        }
+    let parameters = e.get_child("parameters")?;
+
+    for parameter in parameters.children.iter() {
+        match parameter {
+            XMLNode::Element(element) => {
+                if element.name == "parameter" {
+                    let argname = element.attributes.get("name")?.clone();
+                    let e2 = element.get_child("type")?;
+                    let argtype = &e2.attributes.get("name")?;
+                    if !filter(&argtype) {
+                        ret.push((argname, translate(argtype, ns)));
                     }
                 }
-                _ => {}
             }
+            _ => {}
         }
     }
     return Some(ret)
@@ -96,20 +99,27 @@ fn get_inner_doc(e: &Element) -> Option<String> {
 fn callable(e: &Element, parentns: &str) -> Option<Function> {
     let name = e.attributes.get("name")?;
     let intro = e.attributes.get("introspectable");
+
     // TODO should be possible to do this
     if let Some(enabl) = intro {
         if enabl == "0" {
             return None
         }
     }
-    let args = get_params(&e, parentns)?;
-    let ret = get_return(&e, parentns)?;
     let doc = get_inner_doc(&e);
+    let ret = get_return(&e, parentns).unwrap_or(vec![]);
+    let args = get_params(&e, parentns).unwrap_or(vec![]);
     Some(Function::new(name.to_string(), doc, args, ret))
 }
 
 fn get_doc(e: &Element) -> Option<String> {
     e.get_text().map(|x| x.into())
+}
+
+fn get_field(e: &Element) -> Option<(String, String)> {
+    let name = e.attributes.get("name")?;
+    let doc = get_inner_doc(e)?;
+    Some((name.to_string(), doc))
 }
 
 fn get_class(parentns: &str, e: &Element) -> Class {
@@ -124,8 +134,9 @@ fn get_class(parentns: &str, e: &Element) -> Class {
                         class.set_docs(docs);
                     }
                     "field" => {
-                        // TODO
-                        // println!("{:#?}", e)
+                        if let Some(field) = get_field(e) {
+                            class.add_field(field)
+                        }
                     }
                     "source-position" => {
                     }
@@ -150,9 +161,10 @@ fn get_class(parentns: &str, e: &Element) -> Class {
                         }
                     }
                     "property" => {
-                        // TODO
+                        // println!("{:#?}", e)
                     }
                     "signal" => {
+                        // println!("{:#?}", e)
                         // TODO
                     }
                     "implements" => {
@@ -169,8 +181,7 @@ fn get_class(parentns: &str, e: &Element) -> Class {
     class
 }
 
-fn print_macro(e: &Element) {
-    // println!("{:#?}", e);
+fn get_macro(e: &Element) {
 }
 
 // add namespace
@@ -210,12 +221,12 @@ fn get_global(doc: &mut Document, node: &XMLNode) {
                 }
                 "callback" => {
                     // TODO
-                    // println!("{:#?}", e)
                 }
                 "bitfield" => {
                     // println!("{:#?}", e)
                 }
                 "docsection" => {
+                    println!("{:#?}", e)
                 }
                 "name" => {
                 }
