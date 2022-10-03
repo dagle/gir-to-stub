@@ -1024,7 +1024,9 @@ impl<U> MaybeRefAs for U {
 #[derive(Debug, Default)]
 pub struct Namespace {
     pub name: String,
-    pub types: Vec<Option<Type>>,
+    // do we really need to keep track of types at all? 
+    // pub types: Vec<Option<Type>>,
+    // Do we really need to encode types as integers and why does gir-rs do this?
     pub index: BTreeMap<String, u32>,
     pub glib_name_index: HashMap<String, u32>,
     pub constants: Vec<Constant>,
@@ -1034,10 +1036,10 @@ pub struct Namespace {
     pub doc: Option<String>,
     pub doc_deprecated: Option<String>,
     pub shared_library: Vec<String>,
+    // c stuff
     pub identifier_prefixes: Vec<String>,
     pub symbol_prefixes: Vec<String>,
-    /// C headers, relative to include directories provided by pkg-config --cflags.
-    pub c_includes: Vec<String>,
+    // pub c_includes: Vec<String>,
 }
 
 impl Namespace {
@@ -1089,348 +1091,348 @@ impl Namespace {
     }
 }
 
-pub const INTERNAL_NAMESPACE_NAME: &str = "*";
-pub const INTERNAL_NAMESPACE: u16 = 0;
-pub const MAIN_NAMESPACE: u16 = 1;
+// pub const INTERNAL_NAMESPACE_NAME: &str = "*";
+// pub const INTERNAL_NAMESPACE: u16 = 0;
+// pub const MAIN_NAMESPACE: u16 = 1;
 
-#[derive(Debug)]
-pub struct Library {
-    pub namespaces: Vec<Namespace>,
-    pub index: HashMap<String, u16>,
-}
+// #[derive(Debug)]
+// pub struct Library {
+//     pub namespaces: Vec<Namespace>,
+//     pub index: HashMap<String, u16>,
+// }
 
-impl Library {
-    pub fn new(main_namespace_name: &str) -> Library {
-        let mut library = Library {
-            namespaces: Vec::new(),
-            index: HashMap::new(),
-        };
-        assert_eq!(
-            INTERNAL_NAMESPACE,
-            library.add_namespace(INTERNAL_NAMESPACE_NAME)
-        );
-        for &(name, t) in BASIC {
-            library.add_type(INTERNAL_NAMESPACE, name, Type::Basic(t));
-        }
-        assert_eq!(MAIN_NAMESPACE, library.add_namespace(main_namespace_name));
-
-        //For string_type override
-        Type::c_array(&mut library, TypeId::tid_utf8(), None, None);
-        Type::c_array(&mut library, TypeId::tid_filename(), None, None);
-        Type::c_array(&mut library, TypeId::tid_os_string(), None, None);
-
-        library
-    }
-
-    pub fn show_non_bound_types(&self, env: &Env) {
-        let not_allowed_ending = [
-            "Class",
-            "Private",
-            "Func",
-            "Callback",
-            "Accessible",
-            "Iface",
-            "Type",
-            "Interface",
-        ];
-        let namespace_name = self.namespaces[MAIN_NAMESPACE as usize].name.clone();
-        let mut parents = HashSet::new();
-
-        for x in self.namespace(MAIN_NAMESPACE).types.iter().flatten() {
-            let name = x.get_name();
-            let full_name = format!("{}.{}", namespace_name, name);
-            let mut check_methods = true;
-
-            if !not_allowed_ending.iter().any(|s| name.ends_with(s))
-                || x.is_enumeration()
-                || x.is_bitfield()
-            {
-                let version = x.get_deprecated_version();
-                let depr_version = version.unwrap_or(env.config.min_cfg_version);
-                if !env.analysis.objects.contains_key(&full_name)
-                    && !env.analysis.records.contains_key(&full_name)
-                    && !env.config.objects.iter().any(|o| o.1.name == full_name)
-                    && depr_version >= env.config.min_cfg_version
-                {
-                    check_methods = false;
-                    if let Some(version) = version {
-                        println!("[NOT GENERATED] {} (deprecated in {})", full_name, version);
-                    } else {
-                        println!("[NOT GENERATED] {}", full_name);
-                    }
-                } else if let Type::Class(Class { properties, .. }) = x {
-                    if !env
-                        .config
-                        .objects
-                        .get(&full_name)
-                        .map(|obj| obj.generate_builder)
-                        .unwrap_or_else(|| false)
-                        && properties
-                            .iter()
-                            .any(|prop| prop.construct_only || prop.construct || prop.writable)
-                    {
-                        println!("[NOT GENERATED BUILDER] {}Builder", full_name);
-                    }
-                }
-            }
-            if let (Some(tid), Some(gobject_id)) = (
-                env.library.find_type(0, &full_name),
-                env.library.find_type(0, "GObject.Object"),
-            ) {
-                for &super_tid in env.class_hierarchy.supertypes(tid) {
-                    let ty = env.library.type_(super_tid);
-                    let ns_id = super_tid.ns_id as usize;
-                    let full_parent_name =
-                        format!("{}.{}", self.namespaces[ns_id].name, ty.get_name());
-                    if super_tid != gobject_id
-                        && env
-                            .type_status(&super_tid.full_name(&env.library))
-                            .ignored()
-                        && parents.insert(full_parent_name.clone())
-                    {
-                        if let Some(version) = ty.get_deprecated_version() {
-                            println!(
-                                "[NOT GENERATED PARENT] {} (deprecated in {})",
-                                full_parent_name, version
-                            );
-                        } else {
-                            println!("[NOT GENERATED PARENT] {}", full_parent_name);
-                        }
-                    }
-                }
-                if check_methods {
-                    self.not_bound_functions(
-                        env,
-                        &format!("{}::", full_name),
-                        x.functions(),
-                        "METHOD",
-                    );
-                }
-            }
-        }
-        self.not_bound_functions(
-            env,
-            &format!("{}.", namespace_name),
-            &self.namespace(MAIN_NAMESPACE).functions,
-            "FUNCTION",
-        );
-    }
-
-    fn not_bound_functions(&self, env: &Env, prefix: &str, functions: &[Function], kind: &str) {
-        for func in functions {
-            let version = func.deprecated_version;
-            let depr_version = version.unwrap_or(env.config.min_cfg_version);
-
-            if depr_version < env.config.min_cfg_version {
-                continue;
-            }
-
-            let mut errors = func
-                .parameters
-                .iter()
-                .filter_map(|p| {
-                    let mut ty = env.library.type_(p.typ);
-                    let mut ns_id = p.typ.ns_id as usize;
-                    if let Some((t, n)) = ty.get_inner_type(env) {
-                        ty = t;
-                        ns_id = n as usize;
-                    }
-                    if ty.is_basic() {
-                        return None;
-                    }
-                    let full_name = format!("{}.{}", self.namespaces[ns_id].name, ty.get_name());
-                    if env.type_status(&p.typ.full_name(&env.library)).ignored()
-                        && !env.analysis.objects.contains_key(&full_name)
-                        && !env.analysis.records.contains_key(&full_name)
-                        && !env.config.objects.iter().any(|o| o.1.name == full_name)
-                    {
-                        Some(full_name)
-                    } else {
-                        None
-                    }
-                })
-                .collect::<Vec<_>>();
-            {
-                let mut ty = env.library.type_(func.ret.typ);
-                let mut ns_id = func.ret.typ.ns_id as usize;
-                if let Some((t, n)) = ty.get_inner_type(env) {
-                    ty = t;
-                    ns_id = n as usize;
-                }
-                if !ty.is_basic() {
-                    let full_name = format!("{}.{}", self.namespaces[ns_id].name, ty.get_name());
-                    if env
-                        .type_status(&func.ret.typ.full_name(&env.library))
-                        .ignored()
-                        && !env.analysis.objects.contains_key(&full_name)
-                        && !env.analysis.records.contains_key(&full_name)
-                        && !env.config.objects.iter().any(|o| o.1.name == full_name)
-                    {
-                        errors.push(full_name);
-                    }
-                }
-            }
-            if !errors.is_empty() {
-                let full_name = format!("{}{}", prefix, func.name);
-                let deprecated_version = match version {
-                    Some(dv) => format!(" (deprecated in {})", dv),
-                    None => String::new(),
-                };
-                if errors.len() > 1 {
-                    let end = errors.pop().unwrap();
-                    let begin = errors.join(", ");
-                    println!(
-                        "[NOT GENERATED {}] {}{} because of {} and {}",
-                        kind, full_name, deprecated_version, begin, end
-                    );
-                } else {
-                    println!(
-                        "[NOT GENERATED {}] {}{} because of {}",
-                        kind, full_name, deprecated_version, errors[0]
-                    );
-                }
-            }
-        }
-    }
-
-    pub fn namespace(&self, ns_id: u16) -> &Namespace {
-        &self.namespaces[ns_id as usize]
-    }
-
-    pub fn namespace_mut(&mut self, ns_id: u16) -> &mut Namespace {
-        &mut self.namespaces[ns_id as usize]
-    }
-
-    pub fn find_namespace(&self, name: &str) -> Option<u16> {
-        self.index.get(name).cloned()
-    }
-
-    pub fn add_namespace(&mut self, name: &str) -> u16 {
-        if let Some(&id) = self.index.get(name) {
-            id
-        } else {
-            let id = self.namespaces.len() as u16;
-            self.namespaces.push(Namespace::new(name));
-            self.index.insert(name.into(), id);
-            id
-        }
-    }
-
-    pub fn add_constant(&mut self, ns_id: u16, c: Constant) {
-        self.namespace_mut(ns_id).add_constant(c);
-    }
-
-    pub fn add_function(&mut self, ns_id: u16, f: Function) {
-        self.namespace_mut(ns_id).add_function(f);
-    }
-
-    pub fn add_type(&mut self, ns_id: u16, name: &str, typ: Type) -> TypeId {
-        TypeId {
-            ns_id,
-            id: self.namespace_mut(ns_id).add_type(name, Some(typ)),
-        }
-    }
-
-    #[allow(unknown_lints)]
-    #[allow(clippy::manual_map)]
-    pub fn find_type(&self, current_ns_id: u16, name: &str) -> Option<TypeId> {
-        let (mut ns, name) = split_namespace_name(name);
-        if name == "GType" {
-            ns = None;
-        }
-
-        if let Some(ns) = ns {
-            self.find_namespace(ns).and_then(|ns_id| {
-                self.namespace(ns_id)
-                    .find_type(name)
-                    .map(|id| TypeId { ns_id, id })
-            })
-        } else if let Some(id) = self.namespace(current_ns_id).find_type(name) {
-            Some(TypeId {
-                ns_id: current_ns_id,
-                id,
-            })
-        } else if let Some(id) = self.namespace(INTERNAL_NAMESPACE).find_type(name) {
-            Some(TypeId {
-                ns_id: INTERNAL_NAMESPACE,
-                id,
-            })
-        } else {
-            None
-        }
-    }
-
-    pub fn find_or_stub_type(&mut self, current_ns_id: u16, name: &str) -> TypeId {
-        if let Some(tid) = self.find_type(current_ns_id, name) {
-            return tid;
-        }
-
-        let (ns, name) = split_namespace_name(name);
-
-        if let Some(ns) = ns {
-            let ns_id = self
-                .find_namespace(ns)
-                .unwrap_or_else(|| self.add_namespace(ns));
-            let ns = self.namespace_mut(ns_id);
-            let id = ns
-                .find_type(name)
-                .unwrap_or_else(|| ns.add_type(name, None));
-            return TypeId { ns_id, id };
-        }
-
-        let id = self.namespace_mut(current_ns_id).add_type(name, None);
-        TypeId {
-            ns_id: current_ns_id,
-            id,
-        }
-    }
-
-    pub fn type_(&self, tid: TypeId) -> &Type {
-        self.namespace(tid.ns_id).type_(tid.id)
-    }
-
-    pub fn type_mut(&mut self, tid: TypeId) -> &mut Type {
-        self.namespace_mut(tid.ns_id).type_mut(tid.id)
-    }
-
-    pub fn register_version(&mut self, ns_id: u16, version: Version) {
-        self.namespace_mut(ns_id).versions.insert(version);
-    }
-
-    pub fn types<'a>(&'a self) -> Box<dyn Iterator<Item = (TypeId, &Type)> + 'a> {
-        Box::new(self.namespaces.iter().enumerate().flat_map(|(ns_id, ns)| {
-            ns.types.iter().enumerate().filter_map(move |(id, type_)| {
-                let tid = TypeId {
-                    ns_id: ns_id as u16,
-                    id: id as u32,
-                };
-                type_.as_ref().map(|t| (tid, t))
-            })
-        }))
-    }
-
-    /// Types from a single namespace in alphabetical order.
-    pub fn namespace_types<'a>(
-        &'a self,
-        ns_id: u16,
-    ) -> Box<dyn Iterator<Item = (TypeId, &Type)> + 'a> {
-        let ns = self.namespace(ns_id);
-        Box::new(ns.index.values().map(move |&id| {
-            (
-                TypeId { ns_id, id },
-                ns.types[id as usize].as_ref().unwrap(),
-            )
-        }))
-    }
-
-    pub fn is_crate(&self, crate_name: &str) -> bool {
-        self.namespace(MAIN_NAMESPACE).name == crate_name
-    }
-
-    pub fn is_glib_crate(&self) -> bool {
-        self.is_crate("GObject") || self.is_crate("GLib")
-    }
-}
+// impl Library {
+//     pub fn new(main_namespace_name: &str) -> Library {
+//         let mut library = Library {
+//             namespaces: Vec::new(),
+//             index: HashMap::new(),
+//         };
+//         assert_eq!(
+//             INTERNAL_NAMESPACE,
+//             library.add_namespace(INTERNAL_NAMESPACE_NAME)
+//         );
+//         for &(name, t) in BASIC {
+//             library.add_type(INTERNAL_NAMESPACE, name, Type::Basic(t));
+//         }
+//         assert_eq!(MAIN_NAMESPACE, library.add_namespace(main_namespace_name));
+//
+//         //For string_type override
+//         Type::c_array(&mut library, TypeId::tid_utf8(), None, None);
+//         Type::c_array(&mut library, TypeId::tid_filename(), None, None);
+//         Type::c_array(&mut library, TypeId::tid_os_string(), None, None);
+//
+//         library
+//     }
+//
+//     pub fn show_non_bound_types(&self, env: &Env) {
+//         let not_allowed_ending = [
+//             "Class",
+//             "Private",
+//             "Func",
+//             "Callback",
+//             "Accessible",
+//             "Iface",
+//             "Type",
+//             "Interface",
+//         ];
+//         let namespace_name = self.namespaces[MAIN_NAMESPACE as usize].name.clone();
+//         let mut parents = HashSet::new();
+//
+//         for x in self.namespace(MAIN_NAMESPACE).types.iter().flatten() {
+//             let name = x.get_name();
+//             let full_name = format!("{}.{}", namespace_name, name);
+//             let mut check_methods = true;
+//
+//             if !not_allowed_ending.iter().any(|s| name.ends_with(s))
+//                 || x.is_enumeration()
+//                 || x.is_bitfield()
+//             {
+//                 let version = x.get_deprecated_version();
+//                 let depr_version = version.unwrap_or(env.config.min_cfg_version);
+//                 if !env.analysis.objects.contains_key(&full_name)
+//                     && !env.analysis.records.contains_key(&full_name)
+//                     && !env.config.objects.iter().any(|o| o.1.name == full_name)
+//                     && depr_version >= env.config.min_cfg_version
+//                 {
+//                     check_methods = false;
+//                     if let Some(version) = version {
+//                         println!("[NOT GENERATED] {} (deprecated in {})", full_name, version);
+//                     } else {
+//                         println!("[NOT GENERATED] {}", full_name);
+//                     }
+//                 } else if let Type::Class(Class { properties, .. }) = x {
+//                     if !env
+//                         .config
+//                         .objects
+//                         .get(&full_name)
+//                         .map(|obj| obj.generate_builder)
+//                         .unwrap_or_else(|| false)
+//                         && properties
+//                             .iter()
+//                             .any(|prop| prop.construct_only || prop.construct || prop.writable)
+//                     {
+//                         println!("[NOT GENERATED BUILDER] {}Builder", full_name);
+//                     }
+//                 }
+//             }
+//             if let (Some(tid), Some(gobject_id)) = (
+//                 env.library.find_type(0, &full_name),
+//                 env.library.find_type(0, "GObject.Object"),
+//             ) {
+//                 for &super_tid in env.class_hierarchy.supertypes(tid) {
+//                     let ty = env.library.type_(super_tid);
+//                     let ns_id = super_tid.ns_id as usize;
+//                     let full_parent_name =
+//                         format!("{}.{}", self.namespaces[ns_id].name, ty.get_name());
+//                     if super_tid != gobject_id
+//                         && env
+//                             .type_status(&super_tid.full_name(&env.library))
+//                             .ignored()
+//                         && parents.insert(full_parent_name.clone())
+//                     {
+//                         if let Some(version) = ty.get_deprecated_version() {
+//                             println!(
+//                                 "[NOT GENERATED PARENT] {} (deprecated in {})",
+//                                 full_parent_name, version
+//                             );
+//                         } else {
+//                             println!("[NOT GENERATED PARENT] {}", full_parent_name);
+//                         }
+//                     }
+//                 }
+//                 if check_methods {
+//                     self.not_bound_functions(
+//                         env,
+//                         &format!("{}::", full_name),
+//                         x.functions(),
+//                         "METHOD",
+//                     );
+//                 }
+//             }
+//         }
+//         self.not_bound_functions(
+//             env,
+//             &format!("{}.", namespace_name),
+//             &self.namespace(MAIN_NAMESPACE).functions,
+//             "FUNCTION",
+//         );
+//     }
+//
+//     fn not_bound_functions(&self, env: &Env, prefix: &str, functions: &[Function], kind: &str) {
+//         for func in functions {
+//             let version = func.deprecated_version;
+//             let depr_version = version.unwrap_or(env.config.min_cfg_version);
+//
+//             if depr_version < env.config.min_cfg_version {
+//                 continue;
+//             }
+//
+//             let mut errors = func
+//                 .parameters
+//                 .iter()
+//                 .filter_map(|p| {
+//                     let mut ty = env.library.type_(p.typ);
+//                     let mut ns_id = p.typ.ns_id as usize;
+//                     if let Some((t, n)) = ty.get_inner_type(env) {
+//                         ty = t;
+//                         ns_id = n as usize;
+//                     }
+//                     if ty.is_basic() {
+//                         return None;
+//                     }
+//                     let full_name = format!("{}.{}", self.namespaces[ns_id].name, ty.get_name());
+//                     if env.type_status(&p.typ.full_name(&env.library)).ignored()
+//                         && !env.analysis.objects.contains_key(&full_name)
+//                         && !env.analysis.records.contains_key(&full_name)
+//                         && !env.config.objects.iter().any(|o| o.1.name == full_name)
+//                     {
+//                         Some(full_name)
+//                     } else {
+//                         None
+//                     }
+//                 })
+//                 .collect::<Vec<_>>();
+//             {
+//                 let mut ty = env.library.type_(func.ret.typ);
+//                 let mut ns_id = func.ret.typ.ns_id as usize;
+//                 if let Some((t, n)) = ty.get_inner_type(env) {
+//                     ty = t;
+//                     ns_id = n as usize;
+//                 }
+//                 if !ty.is_basic() {
+//                     let full_name = format!("{}.{}", self.namespaces[ns_id].name, ty.get_name());
+//                     if env
+//                         .type_status(&func.ret.typ.full_name(&env.library))
+//                         .ignored()
+//                         && !env.analysis.objects.contains_key(&full_name)
+//                         && !env.analysis.records.contains_key(&full_name)
+//                         && !env.config.objects.iter().any(|o| o.1.name == full_name)
+//                     {
+//                         errors.push(full_name);
+//                     }
+//                 }
+//             }
+//             if !errors.is_empty() {
+//                 let full_name = format!("{}{}", prefix, func.name);
+//                 let deprecated_version = match version {
+//                     Some(dv) => format!(" (deprecated in {})", dv),
+//                     None => String::new(),
+//                 };
+//                 if errors.len() > 1 {
+//                     let end = errors.pop().unwrap();
+//                     let begin = errors.join(", ");
+//                     println!(
+//                         "[NOT GENERATED {}] {}{} because of {} and {}",
+//                         kind, full_name, deprecated_version, begin, end
+//                     );
+//                 } else {
+//                     println!(
+//                         "[NOT GENERATED {}] {}{} because of {}",
+//                         kind, full_name, deprecated_version, errors[0]
+//                     );
+//                 }
+//             }
+//         }
+//     }
+//
+//     pub fn namespace(&self, ns_id: u16) -> &Namespace {
+//         &self.namespaces[ns_id as usize]
+//     }
+//
+//     pub fn namespace_mut(&mut self, ns_id: u16) -> &mut Namespace {
+//         &mut self.namespaces[ns_id as usize]
+//     }
+//
+//     pub fn find_namespace(&self, name: &str) -> Option<u16> {
+//         self.index.get(name).cloned()
+//     }
+//
+//     pub fn add_namespace(&mut self, name: &str) -> u16 {
+//         if let Some(&id) = self.index.get(name) {
+//             id
+//         } else {
+//             let id = self.namespaces.len() as u16;
+//             self.namespaces.push(Namespace::new(name));
+//             self.index.insert(name.into(), id);
+//             id
+//         }
+//     }
+//
+//     pub fn add_constant(&mut self, ns_id: u16, c: Constant) {
+//         self.namespace_mut(ns_id).add_constant(c);
+//     }
+//
+//     pub fn add_function(&mut self, ns_id: u16, f: Function) {
+//         self.namespace_mut(ns_id).add_function(f);
+//     }
+//
+//     pub fn add_type(&mut self, ns_id: u16, name: &str, typ: Type) -> TypeId {
+//         TypeId {
+//             ns_id,
+//             id: self.namespace_mut(ns_id).add_type(name, Some(typ)),
+//         }
+//     }
+//
+//     #[allow(unknown_lints)]
+//     #[allow(clippy::manual_map)]
+//     pub fn find_type(&self, current_ns_id: u16, name: &str) -> Option<TypeId> {
+//         let (mut ns, name) = split_namespace_name(name);
+//         if name == "GType" {
+//             ns = None;
+//         }
+//
+//         if let Some(ns) = ns {
+//             self.find_namespace(ns).and_then(|ns_id| {
+//                 self.namespace(ns_id)
+//                     .find_type(name)
+//                     .map(|id| TypeId { ns_id, id })
+//             })
+//         } else if let Some(id) = self.namespace(current_ns_id).find_type(name) {
+//             Some(TypeId {
+//                 ns_id: current_ns_id,
+//                 id,
+//             })
+//         } else if let Some(id) = self.namespace(INTERNAL_NAMESPACE).find_type(name) {
+//             Some(TypeId {
+//                 ns_id: INTERNAL_NAMESPACE,
+//                 id,
+//             })
+//         } else {
+//             None
+//         }
+//     }
+//
+//     pub fn find_or_stub_type(&mut self, current_ns_id: u16, name: &str) -> TypeId {
+//         if let Some(tid) = self.find_type(current_ns_id, name) {
+//             return tid;
+//         }
+//
+//         let (ns, name) = split_namespace_name(name);
+//
+//         if let Some(ns) = ns {
+//             let ns_id = self
+//                 .find_namespace(ns)
+//                 .unwrap_or_else(|| self.add_namespace(ns));
+//             let ns = self.namespace_mut(ns_id);
+//             let id = ns
+//                 .find_type(name)
+//                 .unwrap_or_else(|| ns.add_type(name, None));
+//             return TypeId { ns_id, id };
+//         }
+//
+//         let id = self.namespace_mut(current_ns_id).add_type(name, None);
+//         TypeId {
+//             ns_id: current_ns_id,
+//             id,
+//         }
+//     }
+//
+//     pub fn type_(&self, tid: TypeId) -> &Type {
+//         self.namespace(tid.ns_id).type_(tid.id)
+//     }
+//
+//     pub fn type_mut(&mut self, tid: TypeId) -> &mut Type {
+//         self.namespace_mut(tid.ns_id).type_mut(tid.id)
+//     }
+//
+//     pub fn register_version(&mut self, ns_id: u16, version: Version) {
+//         self.namespace_mut(ns_id).versions.insert(version);
+//     }
+//
+//     pub fn types<'a>(&'a self) -> Box<dyn Iterator<Item = (TypeId, &Type)> + 'a> {
+//         Box::new(self.namespaces.iter().enumerate().flat_map(|(ns_id, ns)| {
+//             ns.types.iter().enumerate().filter_map(move |(id, type_)| {
+//                 let tid = TypeId {
+//                     ns_id: ns_id as u16,
+//                     id: id as u32,
+//                 };
+//                 type_.as_ref().map(|t| (tid, t))
+//             })
+//         }))
+//     }
+//
+//     /// Types from a single namespace in alphabetical order.
+//     pub fn namespace_types<'a>(
+//         &'a self,
+//         ns_id: u16,
+//     ) -> Box<dyn Iterator<Item = (TypeId, &Type)> + 'a> {
+//         let ns = self.namespace(ns_id);
+//         Box::new(ns.index.values().map(move |&id| {
+//             (
+//                 TypeId { ns_id, id },
+//                 ns.types[id as usize].as_ref().unwrap(),
+//             )
+//         }))
+//     }
+//
+//     pub fn is_crate(&self, crate_name: &str) -> bool {
+//         self.namespace(MAIN_NAMESPACE).name == crate_name
+//     }
+//
+//     pub fn is_glib_crate(&self) -> bool {
+//         self.is_crate("GObject") || self.is_crate("GLib")
+//     }
+// }
 
 #[cfg(test)]
 mod tests {
