@@ -1,6 +1,3 @@
-mod vimdoc;
-mod parse;
-
 use std::fs::File;
 use std::env;
 use std::path::PathBuf;

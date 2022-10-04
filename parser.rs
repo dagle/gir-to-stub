@@ -91,7 +91,7 @@ impl Repository {
                     self.interface.push(read_interface(parser, elem))
                 }
                 "callback" => {
-                    self.callback.push(read_named_callback(parser, elem))
+                    self.callback.push(read_function(parser, elem))
                 }
                 "bitfield" => {
                     self.bitfield.push(read_bitfield(parser, elem))
@@ -334,7 +334,9 @@ fn read_union(
             parser.ignore_element();
             // let record = Record::read(parser, elem, parent_name_prefix, parent_ctype_prefix);
         }
-        "doc" => parser.text().map(|t| doc = Some(t)),
+        "doc" => { 
+            uni.doc = parser.text().ok();
+        }
         "attribute" => parser.ignore_element(),
         _ => Err(parser.unexpected_element(elem)),
     })?;
@@ -392,27 +394,26 @@ fn read_field(
     }
 }
 
-    fn read_named_callback(
-        &mut self,
-        parser: &mut XmlParser<'_>,
-        ns_id: u16,
-        elem: &Element,
-    ) -> Result<(), String> {
-        self.read_function_if_not_moved(parser, ns_id, elem.name(), elem)?
-            .map(|func| {
-                let name = func.name.clone();
-                self.add_type(ns_id, &name, Type::Function(func))
-            });
-
-        Ok(())
-    }
+    // fn read_named_callback(
+    //     &mut self,
+    //     parser: &mut XmlParser<'_>,
+    //     ns_id: u16,
+    //     elem: &Element,
+    // ) -> Result<(), String> {
+    //     self.read_function_if_not_moved(parser, ns_id, elem.name(), elem)?
+    //         .map(|func| {
+    //             let name = func.name.clone();
+    //             self.add_type(ns_id, &name, Type::Function(func))
+    //         });
+    //
+    //     Ok(())
+    // }
 
     fn read_interface(
-        &mut self,
         parser: &mut XmlParser<'_>,
         ns_id: u16,
         elem: &Element,
-    ) -> Result<(), String> {
+    ) -> Result<Interface, String> {
         let interface_name = elem.attr_required("name")?;
         let c_type = self.read_object_c_type(parser, elem)?;
         let symbol_prefix = elem.attr_required("symbol-prefix").map(ToOwned::to_owned)?;
@@ -421,7 +422,15 @@ fn read_field(
         let version = self.read_version(parser, ns_id, elem)?;
         let deprecated_version = self.read_deprecated_version(parser, ns_id, elem)?;
 
-        let mut interface = Interface::new();
+        let mut interface = Interface::new(
+            interface_name,
+            c_type,
+            symbol_prefix,
+            type_struct,
+
+            version,
+            deprecated_version
+        );
 
         parser.elements(|parser, elem| match elem.name() {
             "constructor" => {
@@ -436,6 +445,10 @@ fn read_field(
                 let method = read_function(parser, elem);
                 interface.constructor.push(method)
             }
+            "virtual-method" => {
+                let virt = read_virt(parser, elem);
+                interface.virt.push(virt);
+            }
             "prerequisite" => self.read_type(parser, ns_id, elem).map(|r| {
                 prereqs.push(r.0);
             }),
@@ -447,36 +460,40 @@ fn read_field(
                     properties.push(p);
                 }
             }),
-            "doc" => parser.text().map(|t| doc = Some(t)),
-            "doc-deprecated" => parser.text().map(|t| doc_deprecated = Some(t)),
-            "virtual-method" => parser.ignore_element(),
-            "source-position" => parser.ignore_element(),
+            "doc" => {
+                interface.doc = parser.text().ok();
+            }
+            "doc-deprecated" => {
+                interface.doc = parser.text().ok();
+            }
+            "source-position" => {
+                parser.ignore_element();
+            }
             "attribute" => parser.ignore_element(),
             _ => Err(parser.unexpected_element(elem)),
         })?;
 
-        let typ = Type::Interface(Interface {
-            name: interface_name.into(),
-            c_type: c_type.into(),
-            type_struct,
-            c_class_type: None, // this will be resolved during postprocessing
-            glib_get_type: get_type.into(),
-            functions: fns,
-            signals,
-            properties,
-            prerequisites: prereqs,
-            doc,
-            doc_deprecated,
-            version,
-            deprecated_version,
-            symbol_prefix,
-        });
-        self.add_type(ns_id, interface_name, typ);
-        Ok(())
+        // let typ = Type::Interface(Interface {
+        //     name: interface_name.into(),
+        //     c_type: c_type.into(),
+        //     type_struct,
+        //     c_class_type: None, // this will be resolved during postprocessing
+        //     glib_get_type: get_type.into(),
+        //     functions: fns,
+        //     signals,
+        //     properties,
+        //     prerequisites: prereqs,
+        //     doc,
+        //     doc_deprecated,
+        //     version,
+        //     deprecated_version,
+        //     symbol_prefix,
+        // });
+        // self.add_type(ns_id, interface_name, typ);
+        Ok(interface)
     }
 
     fn read_bitfield(
-        &mut self,
         parser: &mut XmlParser<'_>,
         ns_id: u16,
         elem: &Element,
@@ -488,10 +505,11 @@ fn read_field(
         let version = self.read_version(parser, ns_id, elem)?;
         let deprecated_version = self.read_deprecated_version(parser, ns_id, elem)?;
 
-        let mut members = Vec::new();
-        let mut fns = Vec::new();
-        let mut doc = None;
-        let mut doc_deprecated = None;
+        // let mut members = Vec::new();
+        // let mut fns = Vec::new();
+        // let mut doc = None;
+        // let mut doc_deprecated = None;
+        let bitfield = Bitfield::new();
 
         parser.elements(|parser, elem| match elem.name() {
             "member" => self
@@ -500,31 +518,30 @@ fn read_field(
                 "constructor" | "function" | "method" => {
                     self.read_function_to_vec(parser, ns_id, elem, &mut fns)
                 }
-            "doc" => parser.text().map(|t| doc = Some(t)),
-            "doc-deprecated" => parser.text().map(|t| doc_deprecated = Some(t)),
+            "doc" => bitfield.doc = parser.text().ok(),
+            "doc-deprecated" => bitfield.doc_deprecated = parser.text().ok(),
             "source-position" => parser.ignore_element(),
             "attribute" => parser.ignore_element(),
             _ => Err(parser.unexpected_element(elem)),
         })?;
 
-        let typ = Type::Bitfield(Bitfield {
-            name: bitfield_name.into(),
-            c_type: c_type.into(),
-            members,
-            functions: fns,
-            version,
-            deprecated_version,
-            doc,
-            doc_deprecated,
-            glib_get_type: get_type,
-            symbol_prefix,
-        });
-        self.add_type(ns_id, bitfield_name, typ);
-        Ok(())
+        // let typ = Type::Bitfield(Bitfield {
+        //     name: bitfield_name.into(),
+        //     c_type: c_type.into(),
+        //     members,
+        //     functions: fns,
+        //     version,
+        //     deprecated_version,
+        //     doc,
+        //     doc_deprecated,
+        //     glib_get_type: get_type,
+        //     symbol_prefix,
+        // });
+        // self.add_type(ns_id, bitfield_name, typ);
+        Ok(bitfield)
     }
 
     fn read_enumeration(
-        &mut self,
         parser: &mut XmlParser<'_>,
         ns_id: u16,
         elem: &Element,
@@ -539,10 +556,18 @@ fn read_field(
             .attr("error-domain")
             .map(|s| ErrorDomain::Quark(String::from(s)));
 
-        let mut members = Vec::new();
-        let mut fns = Vec::new();
-        let mut doc = None;
-        let mut doc_deprecated = None;
+        // let mut members = Vec::new();
+        // let mut fns = Vec::new();
+        // let mut doc = None;
+        // let mut doc_deprecated = None;
+        let enu = Enumeration::new(
+            enum_name,
+            c_type,
+            symbol_prefix,
+
+            version,
+            deprecated_version,
+            );
 
         parser.elements(|parser, elem| match elem.name() {
             "member" => self
@@ -551,59 +576,36 @@ fn read_field(
                 "constructor" | "function" | "method" => {
                     self.read_function_to_vec(parser, ns_id, elem, &mut fns)
                 }
-            "doc" => parser.text().map(|t| doc = Some(t)),
-            "doc-deprecated" => parser.text().map(|t| doc_deprecated = Some(t)),
+            "doc" => enu.doc = parser.text().ok(),
+            "doc-deprecated" => enu.doc_deprecated = parser.text().ok(),
             "source-position" => parser.ignore_element(),
             "attribute" => parser.ignore_element(),
             _ => Err(parser.unexpected_element(elem)),
         })?;
 
-        let typ = Type::Enumeration(Enumeration {
-            name: enum_name.into(),
-            c_type: c_type.into(),
-            members,
-            functions: fns,
-            version,
-            deprecated_version,
-            doc,
-            doc_deprecated,
-            error_domain,
-            glib_get_type: get_type,
-            symbol_prefix,
-        });
-        self.add_type(ns_id, enum_name, typ);
-        Ok(())
-    }
-
-    fn read_global_function(
-        &mut self,
-        parser: &mut XmlParser<'_>,
-        ns_id: u16,
-        elem: &Element,
-    ) -> Result<(), String> {
-        self.read_function_if_not_moved(parser, ns_id, "global", elem)
-            .map(|func| {
-                if let Some(func) = func {
-                    self.add_function(ns_id, func);
-                }
-            })
+        Ok(enu)
     }
 
     fn read_constant(
-        &mut self,
         parser: &mut XmlParser<'_>,
         ns_id: u16,
         elem: &Element,
-    ) -> Result<(), String> {
+    ) -> Result<Constant, String> {
         let const_name = elem.attr_required("name")?;
         let c_identifier = elem.attr_required("type")?;
         let value = elem.attr_required("value")?;
         let version = self.read_version(parser, ns_id, elem)?;
         let deprecated_version = self.read_deprecated_version(parser, ns_id, elem)?;
 
-        let mut inner = None;
-        let mut doc = None;
-        let mut doc_deprecated = None;
+        let mut constant = Constant::new(
+            const_name,
+            c_identifier,
+            
+            value,
+
+            version,
+            deprecated_version,
+            );
 
         parser.elements(|parser, elem| match elem.name() {
             "type" | "array" => {
@@ -624,39 +626,16 @@ fn read_field(
                 }
                 Ok(())
             }
-            "doc" => parser.text().map(|t| doc = Some(t)),
-            "doc-deprecated" => parser.text().map(|t| doc_deprecated = Some(t)),
+            "doc" => contant.doc = parser.text().ok(),
+            "doc-deprecated" => contant.doc_deprecated = parser.text().ok(),
             "source-position" => parser.ignore_element(),
             "attribute" => parser.ignore_element(),
             _ => Err(parser.unexpected_element(elem)),
         })?;
-
-        if let Some((typ, c_type, _array_length)) = inner {
-            self.add_constant(
-                ns_id,
-                Constant {
-                    name: const_name.into(),
-                    c_identifier: c_identifier.into(),
-                    typ,
-                    c_type,
-                    value: value.into(),
-                    version,
-                    deprecated_version,
-                    doc,
-                    doc_deprecated,
-                },
-            );
-            Ok(())
-        } else {
-            Err(parser.fail_with_position(
-                    "Missing <type> element inside <constant> element",
-                    elem.position(),
-            ))
-        }
+        Ok(constant)
     }
 
     fn read_alias(
-        &mut self,
         parser: &mut XmlParser<'_>,
         ns_id: u16,
         elem: &Element,
@@ -664,9 +643,13 @@ fn read_field(
         let alias_name = elem.attr_required("name")?;
         let c_identifier = elem.attr_required("type")?;
 
-        let mut inner = None;
-        let mut doc = None;
-        let mut doc_deprecated = None;
+        // let mut inner = None;
+        // let mut doc = None;
+        // let mut doc_deprecated = None;
+        let mut alias = Alias::new(
+            alias_name,
+            c_identifer,
+            );
 
         parser.elements(|parser, elem| match elem.name() {
             "source-position" => parser.ignore_element(),
@@ -685,33 +668,15 @@ fn read_field(
                 }
                 Ok(())
             }
-            "doc" => parser.text().map(|t| doc = Some(t)),
-            "doc-deprecated" => parser.text().map(|t| doc_deprecated = Some(t)),
+            "doc" => alias.doc = parser.text().ok(),
+            "doc-deprecated" => alias.doc_deprecated = parser.text().map(|t| doc_deprecated = Some(t)),
             "attribute" => parser.ignore_element(),
             _ => Err(parser.unexpected_element(elem)),
         })?;
-
-        if let Some((typ, c_type, _array_length)) = inner {
-            let typ = Type::Alias(Alias {
-                name: alias_name.into(),
-                c_identifier: c_identifier.into(),
-                typ,
-                target_c_type: c_type,
-                doc,
-                doc_deprecated,
-            });
-            self.add_type(ns_id, alias_name, typ);
-            Ok(())
-        } else {
-            Err(parser.fail_with_position(
-                    "Missing <type> element inside <alias> element",
-                    elem.position(),
-            ))
-        }
+        Ok(alias)
     }
 
     fn read_member(
-        &mut self,
         parser: &mut XmlParser<'_>,
         ns_id: u16,
         elem: &Element,
@@ -725,38 +690,36 @@ fn read_field(
         let mut doc = None;
         let mut doc_deprecated = None;
 
+        let mut member = Member::new(
+            member_name,
+            c_identifier,
+
+            value,
+
+            version,
+            deprecated_version,
+            );
+
         parser.elements(|parser, elem| match elem.name() {
-            "doc" => parser.text().map(|t| doc = Some(t)),
-            "doc-deprecated" => parser.text().map(|t| doc_deprecated = Some(t)),
+            "doc" => member.doc = parser.text().ok(),
+            "doc-deprecated" => member.doc_deprecated = parser.text().ok(),
             "attribute" => parser.ignore_element(),
             _ => Err(parser.unexpected_element(elem)),
         })?;
 
-        Ok(Member {
-            name: member_name.into(),
-            value: value.into(),
-            doc,
-            doc_deprecated,
-            c_identifier: c_identifier.unwrap_or_else(|| member_name.into()),
-            status: crate::config::gobjects::GStatus::Generate,
-            version,
-            deprecated_version,
-        })
+        Ok(member)
     }
 
     fn read_function(
-        &mut self,
         parser: &mut XmlParser<'_>,
-        ns_id: u16,
-        kind_str: &str,
         elem: &Element,
     ) -> Result<Function, String> {
         let fn_name = elem.attr_required("name")?;
         let c_identifier = elem.attr("identifier").or_else(|| elem.attr("type"));
-        let kind = FunctionKind::from_str(kind_str).map_err(|why| parser.fail(&why))?;
-        let is_method = kind == FunctionKind::Method;
-        let version = self.read_version(parser, ns_id, elem)?;
-        let deprecated_version = self.read_deprecated_version(parser, ns_id, elem)?;
+        // let kind = FunctionKind::from_str(kind_str).map_err(|why| parser.fail(&why))?;
+        // let is_method = kind == FunctionKind::Method;
+        let version = self.read_version(parser, elem)?;
+        let deprecated_version = self.read_deprecated_version(parser, elem)?;
 
         let mut params = Vec::new();
         let mut ret = None;
@@ -764,9 +727,10 @@ fn read_field(
         let mut doc_deprecated = None;
 
         parser.elements(|parser, elem| match elem.name() {
-            "parameters" => self
-                .read_parameters(parser, ns_id, false, is_method)
-                .map(|mut ps| params.append(&mut ps)),
+            "parameters" => { 
+                read_parameters(parser, false, is_method)
+                .map(|mut ps| params.append(&mut ps))
+            }
             "return-value" => {
                 if ret.is_some() {
                     return Err(parser.fail_with_position(
@@ -774,107 +738,41 @@ fn read_field(
                             elem.position(),
                     ));
                 }
+
                 ret = Some(self.read_parameter(parser, ns_id, elem, false, is_method)?);
                 Ok(())
             }
-            "doc" => parser.text().map(|t| doc = Some(t)),
-            "doc-deprecated" => parser.text().map(|t| doc_deprecated = Some(t)),
+            "doc" => doc = parser.text().ok(),
+            "doc-deprecated" => doc_deprecated = parser.text().ok(),
             "doc-version" => parser.ignore_element(),
             "source-position" => parser.ignore_element(),
             "attribute" => parser.ignore_element(),
             _ => Err(parser.unexpected_element(elem)),
         })?;
 
-        let throws = elem.attr_bool("throws", false);
-        if throws {
-            params.push(Parameter {
-                name: "error".into(),
-                typ: self.find_or_stub_type(ns_id, "GLib.Error"),
-                c_type: "GError**".into(),
-                instance_parameter: false,
-                direction: ParameterDirection::Out,
-                transfer: Transfer::Full,
-                caller_allocates: false,
-                nullable: Nullable(true),
-                array_length: None,
-                allow_none: true,
-                is_error: true,
-                doc: None,
-                scope: ParameterScope::None,
-                closure: None,
-                destroy: None,
-            });
-        }
-        if let Some(ret) = ret {
-            Ok(Function {
-                name: fn_name.into(),
-                c_identifier: c_identifier.map(|s| s.into()),
-                kind,
-                parameters: params,
-                ret,
-                throws,
-                version,
-                deprecated_version,
-                doc,
-                doc_deprecated,
-            })
-        } else {
-            Err(parser.fail_with_position(
-                    "Missing <return-value> element in <function> element",
-                    elem.position(),
-            ))
-        }
-    }
+        let func = Function::new(
+            fn_name,
+            c_indentifier,
 
-    fn read_function_to_vec(
-        &mut self,
-        parser: &mut XmlParser<'_>,
-        ns_id: u16,
-        elem: &Element,
-        fns: &mut Vec<Function>,
-    ) -> Result<(), String> {
-        if let Some(f) = self.read_function_if_not_moved(parser, ns_id, elem.name(), elem)? {
-            fns.push(f)
-        }
-        Ok(())
-    }
-
-    fn read_function_if_not_moved(
-        &mut self,
-        parser: &mut XmlParser<'_>,
-        ns_id: u16,
-        kind_str: &str,
-        elem: &Element,
-    ) -> Result<Option<Function>, String> {
-        if elem.attr("moved-to").is_some() {
-            return parser.ignore_element().map(|_| None);
-        }
-        self.read_function(parser, ns_id, kind_str, elem)
-            .and_then(|f| {
-                if f.c_identifier.is_none() {
-                    return Err(parser.fail_with_position(
-                            &format!(
-                                "Missing c:identifier attribute in <{}> element",
-                                elem.name()
-                            ),
-                            elem.position(),
-                    ));
-                }
-                Ok(Some(f))
-            })
+            params,
+            ret,
+            version,
+            deprecated_version,
+            doc,
+            doc_deprecated
+        );
+        Ok(func)
     }
 
     fn read_signal(
-        &mut self,
         parser: &mut XmlParser<'_>,
-        ns_id: u16,
         elem: &Element,
     ) -> Result<Signal, String> {
         let signal_name = elem.attr_required("name")?;
         let is_action = elem.attr_bool("action", false);
         let is_detailed = elem.attr_bool("detailed", false);
-        let version = self.read_version(parser, ns_id, elem)?;
-        let deprecated_version = self.read_deprecated_version(parser, ns_id, elem)?;
+        let version = self.read_version(parser, elem)?;
+        let deprecated_version = self.read_deprecated_version(parser, elem)?;
 
         let mut params = Vec::new();
         let mut ret = None;
@@ -921,24 +819,20 @@ fn read_field(
     }
 
     fn read_parameters(
-        &mut self,
         parser: &mut XmlParser<'_>,
-        ns_id: u16,
         allow_no_ctype: bool,
         for_method: bool,
     ) -> Result<Vec<Parameter>, String> {
         parser.elements(|parser, elem| match elem.name() {
             "parameter" | "instance-parameter" => {
-                self.read_parameter(parser, ns_id, elem, allow_no_ctype, for_method)
+                read_parameter(parser, elem, allow_no_ctype, for_method)
             }
             _ => Err(parser.unexpected_element(elem)),
         })
     }
 
     fn read_parameter(
-        &mut self,
         parser: &mut XmlParser<'_>,
-        ns_id: u16,
         elem: &Element,
         allow_no_ctype: bool,
         for_method: bool,
@@ -1043,11 +937,10 @@ fn read_field(
     }
 
     fn read_property(
-        &mut self,
         parser: &mut XmlParser<'_>,
-        ns_id: u16,
         elem: &Element,
     ) -> Result<Option<Property>, String> {
+
         let prop_name = elem.attr_required("name")?;
         let readable = elem.attr_bool("readable", true);
         let writable = elem.attr_bool("writable", false);
@@ -1116,9 +1009,7 @@ fn read_field(
     }
 
     fn read_type(
-        &mut self,
         parser: &mut XmlParser<'_>,
-        ns_id: u16,
         elem: &Element,
     ) -> Result<(TypeId, Option<String>, Option<u32>), String> {
         let type_name = elem
@@ -1179,27 +1070,21 @@ fn read_field(
     }
 
     fn read_version(
-        &mut self,
         parser: &XmlParser<'_>,
-        ns_id: u16,
         elem: &Element,
     ) -> Result<Option<Version>, String> {
-        self.read_version_attribute(parser, ns_id, elem, "version")
+        read_version_attribute(parser, elem, "version")
     }
 
     fn read_deprecated_version(
-        &mut self,
         parser: &XmlParser<'_>,
-        ns_id: u16,
         elem: &Element,
     ) -> Result<Option<Version>, String> {
-        self.read_version_attribute(parser, ns_id, elem, "deprecated-version")
+        read_version_attribute(parser, elem, "deprecated-version")
     }
 
     fn read_version_attribute(
-        &mut self,
         parser: &XmlParser<'_>,
-        ns_id: u16,
         elem: &Element,
         attr: &str,
     ) -> Result<Option<Version>, String> {
@@ -1217,7 +1102,6 @@ fn read_field(
     }
 
     fn read_object_c_type<'a>(
-        &mut self,
         parser: &mut XmlParser<'_>,
         elem: &'a Element,
     ) -> Result<&'a str, String> {

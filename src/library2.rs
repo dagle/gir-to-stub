@@ -55,6 +55,7 @@ pub struct Class {
     pub functions: Vec<Function>,
     pub method: Vec<Function>,
     pub virt: Vec<Function>,
+    pub callbacks: Vec<Function>,
 
     pub fields: Vec<Field>,
     pub signals: Vec<Signal>,
@@ -105,11 +106,12 @@ pub struct Record {
 #[derive(Default, Debug)]
 pub struct Interface {
     pub name: String,
+
     pub c_type: String,
     pub symbol_prefix: String,
     pub type_struct: Option<String>,
-    pub c_class_type: Option<String>,
-    pub glib_get_type: String,
+    // pub c_class_type: Option<String>,
+    // pub glib_get_type: String,
 
     // pub functions: Vec<Function>,
     // this should work?
@@ -175,7 +177,7 @@ pub struct Enumeration {
     pub doc_deprecated: Option<String>,
 
     // pub error_domain: Option<ErrorDomain>,
-    pub glib_get_type: Option<String>,
+    // pub glib_get_type: Option<String>,
 }
 
 #[derive(Debug)]
