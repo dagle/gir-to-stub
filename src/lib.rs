@@ -1,4 +1,4 @@
 mod vimdoc;
 mod parse;
-mod library2;
+mod library;
 mod version;

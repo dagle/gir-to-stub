@@ -25,10 +25,13 @@ pub struct Namespace {
 
     pub classes: Vec<Class>,
     pub functions: Vec<Function>,
+    // do we even need these?
     pub macros: Vec<Function>,
+    // we need to register all callbacks because
+    // a callback is actually makes a new basic type
     pub callback: Vec<Function>,
 
-    pub interafes: Vec<Interface>,
+    pub interfaces: Vec<Interface>,
     pub enums: Vec<Enumeration>,
     pub record: Vec<Record>,
     pub constant: Vec<Constant>,
@@ -48,6 +51,7 @@ pub struct Class {
     pub c_type: String,
     pub symbol_prefix: String,
     pub type_struct: Option<String>,
+    pub introspectable: bool,
     // pub c_class_type: Option<String>,
     // pub glib_get_type: String,
 
@@ -84,6 +88,7 @@ pub struct Record {
     pub c_type: String,
     pub symbol_prefix: Option<String>,
     pub glib_get_type: Option<String>,
+    pub introspectable: bool,
     // pub gtype_struct_for: Option<String>,
 
     pub fields: Vec<Field>,
@@ -110,6 +115,7 @@ pub struct Interface {
     pub c_type: String,
     pub symbol_prefix: String,
     pub type_struct: Option<String>,
+    pub introspectable: bool,
     // pub c_class_type: Option<String>,
     // pub glib_get_type: String,
 
@@ -136,6 +142,8 @@ pub struct Interface {
 pub struct Constant {
     pub name: String,
     pub c_identifier: String,
+    pub introspectable: bool,
+
     pub typ: _Type,
     pub c_type: String,
     pub value: String,
@@ -151,6 +159,7 @@ pub struct Bitfield {
     pub name: String,
     pub c_type: String,
     pub symbol_prefix: Option<String>,
+    pub introspectable: bool,
     pub members: Vec<Member>,
     pub functions: Vec<Function>,
     pub version: Option<Version>,
@@ -166,6 +175,7 @@ pub struct Enumeration {
 
     pub c_type: String,
     pub symbol_prefix: Option<String>,
+    pub introspectable: bool,
 
     pub members: Vec<Member>,
     pub functions: Vec<Function>,
@@ -184,6 +194,7 @@ pub struct Enumeration {
 pub struct Function {
     pub name: String,
     pub c_identifier: Option<String>,
+    pub introspectable: bool,
 
     pub parameters: Vec<Parameter>,
     pub ret: Parameter,
@@ -202,6 +213,7 @@ pub struct Union {
 
     pub c_type: Option<String>,
     pub symbol_prefix: Option<String>,
+    pub introspectable: bool,
 
     // pub glib_get_type: Option<String>,
     pub fields: Vec<Field>,
@@ -219,6 +231,7 @@ pub struct Signal {
 
     pub parameters: Vec<Parameter>,
     pub ret: Parameter,
+    pub introspectable: bool,
 
     pub is_action: bool,
     pub is_detailed: bool,
@@ -237,6 +250,7 @@ pub struct Boxed {
     pub typename: Option<String>,
     pub get_type: Option<_Type>,
     pub parameters: Vec<Parameter>,
+    pub introspectable: bool,
     pub funs: Vec<Function>,
 
     pub version: Option<Version>,
@@ -249,6 +263,7 @@ pub struct Boxed {
 #[derive(Debug)]
 pub struct Alias {
     pub name: String,
+    pub introspectable: bool,
     pub c_identifier: String,
     pub typ: _Type,
     pub target_c_type: String,
@@ -295,6 +310,7 @@ pub enum ParameterScope {
 pub struct Member {
     pub name: String,
     pub c_identifier: String,
+    pub introspectable: bool,
     pub value: String,
     pub doc: Option<String>,
     pub doc_deprecated: Option<String>,
@@ -333,6 +349,7 @@ pub struct Field {
     pub name: String,
     pub typ: _Type,
     pub c_type: Option<String>,
+    pub introspectable: bool,
     pub private: bool,
     pub bits: Option<u8>,
     pub array_length: Option<u32>,
@@ -344,6 +361,7 @@ pub struct Property {
     pub name: String,
     pub readable: bool,
     pub writable: bool,
+    pub introspectable: bool,
     pub construct: bool,
     pub construct_only: bool,
     pub typ: _Type,
