@@ -1,87 +1,149 @@
-use std::collections::HashSet;
-
-// #[derive(Debug, Default, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
-// pub struct Version(pub u16, pub u16, pub u16);
-
-// For now
 type _Type = String;
 type Nullable = bool;
 type Version = String;
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct Repository {
-    pub imports: HashSet<String>,
-    pub namespaces: Vec<Namespace>,
+    pub version: Option<String>,
+    pub xmlns: Option<String>,
+    pub identifier_prefixes: Option<String>,
+    pub symbol_prefixes : Option<String>,
+    pub include: Vec<Include>,
+    pub cinclude: Vec<CInclude>,
+    pub package: Vec<Package>,
+    pub namespace: Vec<Namespace>,
+}
+
+#[derive(Debug)]
+pub struct Include {
+    pub name: String,
+    pub version: Option<String>,
+}
+
+#[derive(Debug)]
+pub struct CInclude {
+    pub name: String,
+}
+
+#[derive(Debug)]
+pub struct Package {
+    pub name: String,
 }
 
 #[derive(Default, Debug)]
 pub struct Namespace {
-    pub name: String,
-    pub package_name: Option<String>,
+    pub name: Option<String>,
 
-    pub version: Version,
-    pub identifier_prefixes: Vec<String>,
-    pub symbol_prefixes: Vec<String>,
-    pub shared_library: Vec<String>,
+    pub version: Option<String>,
+
+    pub shared_library: Option<String>,
+
+    pub identifier_prefixes: Option<String>,
+    pub symbol_prefixes: Option<String>,
+    pub prefix: Option<String>,
 
     pub classes: Vec<Class>,
     pub functions: Vec<Function>,
-    // do we even need these?
     pub macros: Vec<Function>,
-    // we need to register all callbacks because
-    // a callback is actually makes a new basic type
     pub callback: Vec<Function>,
 
-    pub interfaces: Vec<Interface>,
-    pub enums: Vec<Enumeration>,
-    pub record: Vec<Record>,
-    pub constant: Vec<Constant>,
-    pub bitfield: Vec<Bitfield>,
-    pub alias: Vec<Alias>,
-    pub unions: Vec<Union>,
-    pub boxed: Vec<Boxed>,
+    // pub interfaces: Vec<Interface>,
+    // pub enums: Vec<Enumeration>,
+    // pub record: Vec<Record>,
+    // pub constant: Vec<Constant>,
+    // pub bitfield: Vec<Bitfield>,
+    // pub alias: Vec<Alias>,
+    // pub unions: Vec<Union>,
+    // pub boxed: Vec<Boxed>,
 
-    pub doc: Option<String>,
-    pub doc_deprecated: Option<String>,
+    // pub doc: Option<String>,
+    // pub doc_deprecated: Option<String>,
+}
+
+#[derive(Default, Debug)]
+pub struct InfoAttrs {
+    pub introspectable: Option<bool>,
+    pub deprecated: Option<String>,
+    pub deprecated_version: Option<String>,
+    pub version: Option<String>,
+    pub stability: Option<String>,
+}
+
+#[derive(Default, Debug)]
+pub struct InfoElements {
+    pub doc: Option<Doc>,
+    pub doc_stability: Option<DocVersioned>,
+    pub doc_version: Option<DocVersioned>,
+    pub doc_deprecated: Option<DocVersioned>,
+    pub doc_pos: Option<DocPosition>,
+}
+
+#[derive(Default, Debug)]
+pub struct Doc {
+    pub preserve_space: Option<String>,
+    pub preserve_white: Option<String>,
+    pub filename: String,
+    pub line: String,
+    pub column: Option<String>,
+    pub content: String,
+}
+
+// doc-versioned
+#[derive(Default, Debug)]
+pub struct DocVersioned {
+    pub preserve_space: Option<String>,
+    pub preserve_white: Option<String>,
+    pub content: String,
+}
+
+#[derive(Default, Debug)]
+pub struct DocPosition {
+    pub filename: String,
+    pub line: String,
+    pub column: Option<String>,
 }
 
 #[derive(Default, Debug)]
 pub struct Class {
+    pub info: InfoAttrs,
+
     pub name: String,
 
-    pub c_type: String,
-    pub symbol_prefix: String,
-    // pub type_struct: Option<String>,
-    pub introspectable: bool,
-    // pub c_class_type: Option<String>,
-    // pub glib_get_type: String,
+    pub glib_type_name: String,
+    pub glib_get_type: String,
+
+    pub parent: Option<String>,
+    pub glib_type_struct: Option<String>,
+
+    pub ref_func: Option<String>,
+    pub unref_func: Option<String>,
+
+    pub set_value_func: Option<String>,
+    pub get_value_func: Option<String>,
+
+    pub ctype: Option<String>,
+
+    pub symbol_prefix: Option<String>,
+    pub abstracts: Option<String>,
+
+    pub glib_fundamental: Option<String>,
+    pub finals: Option<String>,
 
     pub constructor: Vec<Function>,
     pub functions: Vec<Function>,
     pub method: Vec<Function>,
-    pub virt: Vec<Function>,
+    pub virtual_method: Vec<Function>,
     pub callbacks: Vec<Function>,
+    //
+    // pub fields: Vec<Field>,
+    // pub signals: Vec<Signal>,
+    // pub properties: Vec<Property>,
+    // pub implements: Vec<String>,
 
-    pub fields: Vec<Field>,
-    pub signals: Vec<Signal>,
-    pub properties: Vec<Property>,
+    pub doc: InfoElements,
 
-    // is this enough? We don't really need to walk a tree of types
-    pub parent: Option<_Type>,
-    pub implements: Vec<_Type>,
-    // pub final_type: bool,
-
-    pub version: Option<Version>,
-    pub deprecated_version: Option<Version>,
-
-    pub doc: Option<String>,
-    pub doc_deprecated: Option<String>,
-    pub is_abstract: bool,
-    pub is_fundamental: bool,
-    // Specific to fundamental types
-    // pub ref_fn: Option<String>,
-    // pub unref_fn: Option<String>,
 }
+
 #[derive(Default, Debug)]
 pub struct Record {
     pub name: String,
@@ -191,21 +253,35 @@ pub struct Enumeration {
     // pub glib_get_type: Option<String>,
 }
 
-#[derive(Debug)]
+
+
+    // pub name: String,
+    // attribute name { xsd:string },
+    // # C identifier in the source code of the Callable
+    // attribute c:identifier { xsd:string }?,
+    // ## Callable it is shadowed by. For example, in C++, only one version of an overloaded callable will appear
+    // attribute shadowed-by { xsd:string }?,
+    // ## Callable it shadows. For example, in C++, only one version of an overloaded callable will appear
+    // attribute shadows { xsd:string }?,
+    // ## Binary attribute, true if the callable can throw an error
+    // attribute throws { "0" | "1" }?,
+    // ## if for backward compatibility reason the callable has a name in the source code but should be known by another one, this attribute contains the new name    
+    // attribute moved-to { xsd:string }?
+
+#[derive(Default, Debug)]
 pub struct Function {
+    pub info: InfoAttrs,
+    pub doc: InfoElements,
+    
     pub name: String,
     pub c_identifier: Option<String>,
-    pub introspectable: bool,
+    pub shadowed_by: Option<String>,
+    pub shadows: Option<String>,
+    pub throws: Option<bool>,
+    pub moved_to: Option<String>,
 
     pub parameters: Vec<Parameter>,
     pub ret: Option<Parameter>,
-    pub throws: bool,
-
-    pub version: Option<Version>,
-    pub deprecated_version: Option<Version>,
-
-    pub doc: Option<String>,
-    pub doc_deprecated: Option<String>,
 }
 
 #[derive(Default, Debug)]
@@ -275,15 +351,6 @@ pub struct Alias {
     pub doc_deprecated: Option<String>,
 }
 
-//////////////////////
-
-#[derive(Debug, Clone)]
-pub enum Type {
-    Primitive(String),
-    LocalClass(String),
-    ExternalClass { module: String, name: String },
-    Any,
-}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ParameterDirection {
@@ -324,28 +391,50 @@ pub struct Member {
     pub deprecated_version: Option<Version>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Parameter {
     pub name: String,
-    pub typ: _Type,
+    pub nullable: Option<String>,
+    pub allow_none: Option<String>,
+    pub introspectable: Option<String>,
+    pub closure: Option<String>,
+    pub destroy: Option<String>,
+    pub scope: Option<String>,
+    pub direction: Option<String>,
+    pub caller_allocates: Option<String>,
+    pub optional: Option<String>,
+    pub skip: Option<String>,
+    pub transfer: Option<Transfer>,
+    pub doc: InfoElements,
+    pub typ: AnyType,
+}
 
-    pub c_type: Option<String>,
-    pub instance_parameter: bool,
+#[derive(Debug)]
+pub enum AnyType {
+    Array(Array),
+    Type(Type),
+    VarArg,
+}
 
-    pub direction: ParameterDirection,
-    pub transfer: Transfer,
-    pub vararg: bool,
+#[derive(Debug)]
+pub struct Array {
+    pub name: Option<String>,
+    pub zero_terminated: Option<bool>,
+    pub fixed_size: Option<bool>,
+    pub introspectable: Option<bool>,
+    pub length: Option<usize>,
+    pub ctype: Option<String>,
+    pub typ: Box<AnyType>,
+}
 
-    pub caller_allocates: bool,
-    pub nullable: Nullable,
-    pub allow_none: bool,
-    pub array_length: Option<u32>,
-    pub doc: Option<String>,
-    pub scope: ParameterScope,
-    /// Index of the user data parameter associated with the callback.
-    pub closure: bool,
-    /// Index of the destroy notification parameter associated with the callback.
-    pub destroy: bool
+#[derive(Debug)]
+pub struct Type {
+    pub name: Option<String>,
+    pub ctype: Option<String>,
+    pub introspectable: Option<bool>,
+
+    pub doc: InfoElements,
+    pub children: Vec<AnyType>,
 }
 
 #[derive(Default, Debug)]
