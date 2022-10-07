@@ -44,7 +44,7 @@ pub struct Namespace {
 
     pub classes: Vec<Class>,
     pub functions: Vec<Function>,
-    pub macros: Vec<Function>,
+    pub macros: Vec<Macro>,
     pub callback: Vec<Function>,
 
     // pub interfaces: Vec<Interface>,
@@ -134,11 +134,14 @@ pub struct Class {
     pub method: Vec<Function>,
     pub virtual_method: Vec<Function>,
     pub callbacks: Vec<Function>,
-    //
-    // pub fields: Vec<Field>,
-    // pub signals: Vec<Signal>,
-    // pub properties: Vec<Property>,
-    // pub implements: Vec<String>,
+
+    pub record: Vec<Record>,
+    pub fields: Vec<Field>,
+    pub signals: Vec<Signal>,
+    pub unions: Vec<Union>,
+    pub constant: Vec<Constant>,
+    pub properties: Vec<Property>,
+    pub implements: Vec<String>,
 
     pub doc: InfoElements,
 
@@ -147,28 +150,23 @@ pub struct Class {
 #[derive(Default, Debug)]
 pub struct Record {
     pub name: String,
+    pub info: InfoAttrs,
+    pub doc: InfoElements,
 
-    pub c_type: String,
+    pub c_type: Option<String>,
+    pub disguised: Option<bool>,
     pub symbol_prefix: Option<String>,
     pub glib_get_type: Option<String>,
-    pub introspectable: bool,
-    // pub gtype_struct_for: Option<String>,
+    pub glib_type_name: Option<String>,
+    pub glib_is_gtype_struct_for: Option<String>,
+    pub foreign: Option<bool>,
 
     pub fields: Vec<Field>,
-    pub union: Vec<Union>,
+    pub unions: Vec<Union>,
 
     pub constructor: Vec<Function>,
     pub functions: Vec<Function>,
     pub method: Vec<Function>,
-
-    pub version: Option<Version>,
-    pub deprecated_version: Option<Version>,
-
-    pub doc: Option<String>,
-    pub doc_deprecated: Option<String>,
-    /// A 'disguised' record is one where the c:type is a typedef that
-    /// doesn't look like a pointer, but is internally: typedef struct _X *X;
-    pub disguised: bool,
 }
 
 #[derive(Default, Debug)]
@@ -203,70 +201,58 @@ pub struct Interface {
 
 #[derive(Debug)]
 pub struct Constant {
-    pub name: String,
-    pub c_identifier: String,
-    pub introspectable: bool,
+    pub info: InfoAttrs,
+    pub doc: InfoElements,
 
-    pub typ: _Type,
-    pub c_type: Option<String>,
+    pub name: String,
     pub value: String,
-    pub version: Option<Version>,
-    pub deprecated_version: Option<Version>,
-    pub doc: Option<String>,
-    pub doc_deprecated: Option<String>,
+    pub c_identifier: Option<String>,
+    pub c_type: Option<String>,
+
+    pub typ: Option<AnyType>,
 }
 
 
 #[derive(Debug)]
 pub struct Bitfield {
+    pub info: InfoAttrs,
+    pub doc: InfoElements,
     pub name: String,
+
     pub c_type: String,
-    pub symbol_prefix: Option<String>,
-    pub introspectable: bool,
+    pub glib_type_name: Option<String>,
+    pub glib_get_type: Option<String>,
+
     pub members: Vec<Member>,
     pub functions: Vec<Function>,
-    pub version: Option<Version>,
-    pub deprecated_version: Option<Version>,
-    pub doc: Option<String>,
-    pub doc_deprecated: Option<String>,
-    pub glib_get_type: Option<String>,
 }
 
 #[derive(Debug)]
 pub struct Enumeration {
+    pub info: InfoAttrs,
+    pub doc: InfoElements,
+
     pub name: String,
 
     pub c_type: String,
-    pub symbol_prefix: Option<String>,
-    pub introspectable: bool,
+    pub glib_type_name: Option<String>,
+    pub glib_get_type: Option<String>,
+    pub glib_error_domain: Option<String>,
 
     pub members: Vec<Member>,
     pub functions: Vec<Function>,
-
-    pub version: Option<Version>,
-    pub deprecated_version: Option<Version>,
-
-    pub doc: Option<String>,
-    pub doc_deprecated: Option<String>,
-
-    // pub error_domain: Option<ErrorDomain>,
-    // pub glib_get_type: Option<String>,
 }
 
+#[derive(Default, Debug)]
+pub struct Macro {
+    pub info: InfoAttrs,
+    pub doc: InfoElements,
+    
+    pub name: String,
+    pub c_identifier: Option<String>,
 
-
-    // pub name: String,
-    // attribute name { xsd:string },
-    // # C identifier in the source code of the Callable
-    // attribute c:identifier { xsd:string }?,
-    // ## Callable it is shadowed by. For example, in C++, only one version of an overloaded callable will appear
-    // attribute shadowed-by { xsd:string }?,
-    // ## Callable it shadows. For example, in C++, only one version of an overloaded callable will appear
-    // attribute shadows { xsd:string }?,
-    // ## Binary attribute, true if the callable can throw an error
-    // attribute throws { "0" | "1" }?,
-    // ## if for backward compatibility reason the callable has a name in the source code but should be known by another one, this attribute contains the new name    
-    // attribute moved-to { xsd:string }?
+    pub parameters: Vec<MacroParam>,
+}
 
 #[derive(Default, Debug)]
 pub struct Function {
@@ -286,41 +272,37 @@ pub struct Function {
 
 #[derive(Default, Debug)]
 pub struct Union {
-    pub name: String,
+    pub name: Option<String>,
+    pub info: InfoAttrs,
+    pub doc: InfoElements,
 
     pub c_type: Option<String>,
     pub symbol_prefix: Option<String>,
-    pub introspectable: bool,
+    pub glib_type_name: Option<String>,
+    pub glib_get_type: Option<String>,
 
-    // pub glib_get_type: Option<String>,
     pub fields: Vec<Field>,
-
     pub constructor: Vec<Function>,
-    pub functions: Vec<Function>,
     pub method: Vec<Function>,
-
-    pub doc: Option<String>,
+    pub functions: Vec<Function>,
+    pub record: Vec<Record>,
 }
 
 #[derive(Debug)]
 pub struct Signal {
     pub name: String,
+    pub info: InfoAttrs,
+    pub doc: InfoElements,
+
+    pub detailed: Option<bool>,
+    pub when: Option<String>,
+    pub action: Option<bool>,
+    pub no_hooks: Option<bool>,
+    pub no_recurse: Option<bool>,
+    pub emitter: Option<String>,
 
     pub parameters: Vec<Parameter>,
     pub ret: Option<Parameter>,
-    pub introspectable: bool,
-
-    pub is_action: bool,
-    pub is_detailed: bool,
-
-    // when
-    // recurse
-
-    pub version: Option<Version>,
-    pub deprecated_version: Option<Version>,
-
-    pub doc: Option<String>,
-    pub doc_deprecated: Option<String>,
 }
 
 #[derive(Debug)]
@@ -379,16 +361,19 @@ pub enum ParameterScope {
 
 #[derive(Debug)]
 pub struct Member {
+    pub info: InfoAttrs,
+    pub doc: InfoElements,
     pub name: String,
-    pub c_identifier: String,
-    pub introspectable: bool,
     pub value: String,
-    pub doc: Option<String>,
-    pub doc_deprecated: Option<String>,
-    /// XXX add this back?
-    // pub status: GStatus,
-    pub version: Option<Version>,
-    pub deprecated_version: Option<Version>,
+    pub c_identifier: Option<String>,
+    pub glib_nick: Option<String>,
+    // pub glib_name: Option<String>,
+}
+
+#[derive(Debug)]
+pub struct MacroParam {
+    pub name: String,
+    pub doc: InfoElements,
 }
 
 #[derive(Debug)]
@@ -411,6 +396,7 @@ pub struct Parameter {
 
 #[derive(Debug)]
 pub enum AnyType {
+    // Callback(Function),
     Array(Array),
     Type(Type),
     VarArg,
@@ -437,32 +423,32 @@ pub struct Type {
     pub children: Vec<AnyType>,
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct Field {
     pub name: String,
-    pub typ: _Type,
-    pub c_type: Option<String>,
-    pub introspectable: bool,
-    pub private: bool,
-    pub bits: Option<u8>,
-    pub array_length: Option<u32>,
-    pub doc: Option<String>,
+    pub info: InfoAttrs,
+    pub doc: InfoElements,
+
+    pub typ: AnyType,
+    pub writeable: Option<bool>,
+    pub readable: Option<bool>,
+    pub private: Option<bool>,
+    pub bits: Option<u32>,
 }
 
 #[derive(Debug)]
 
 pub struct Property {
     pub name: String,
-    pub readable: bool,
-    pub writable: bool,
-    pub introspectable: bool,
-    pub construct: bool,
-    pub construct_only: bool,
-    pub typ: _Type,
-    pub c_type: Option<String>,
-    pub transfer: Transfer,
-    pub version: Option<Version>,
-    pub deprecated_version: Option<Version>,
-    pub doc: Option<String>,
-    pub doc_deprecated: Option<String>,
+    pub info: InfoAttrs,
+    pub doc: InfoElements,
+
+    pub readable: Option<bool>,
+    pub writable: Option<bool>,
+    pub construct: Option<bool>,
+    pub construct_only: Option<bool>,
+    pub setter: Option<String>,
+    pub getter: Option<String>,
+    pub transfer: Option<Transfer>,
+    pub typ: AnyType,
 }

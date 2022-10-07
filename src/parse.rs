@@ -197,42 +197,74 @@ fn read_params(e: &Element) -> Option<Vec<Parameter>> {
 //     e.attributes.get(attr).map(|x| x == "1").unwrap_or(def)
 // }
 //
-// fn read_signal(e: &Element) -> Option<Function> {
-//     let name = e.attributes.get("name")?;
-//
-//     let ret = read_return(&e)?;
-//     let parameters = read_params(&e).unwrap_or(vec![]);
-//     let introspectable = get_introspectable(e, true);
-//
-//     let is_action = attribute_bool(e, "action", false);
-//     let is_detailed = attribute_bool(e, "detailed", false);
-//
-//
-//     let version = e.attributes.get("version");
-//     let deprecated = e.attributes.get("deprecated");
-//     let deprecated_version = e.attributes.get("deprecated-version");
-//
-//     let introspectable = get_introspectable(e, true);
-//
-//     let doc = read_inner_doc(&e);
-//     let doc_deprecated = read_inner_doc_depricated(&e);
-//
-//     let ret = read_return(&e);
-//     let parameters = read_params(&e).unwrap_or(vec![]);
-//
-//     Some(Signal { 
-//         name,
-//         introspectable,
-//         parameters,
-//         ret,
-//         is_action,
-//         is_detailed,
-//         version,
-//         deprecated_version,
-//         doc,
-//         doc_deprecated
-//     })
-// }
+fn read_macro_param(e: &Element) -> Option<MacroParam> {
+    let name = attribute(e, "name")?;
+    let doc = read_infoelements(e)?;
+    Some(MacroParam{
+        name,
+        doc,
+    })
+}
+
+fn read_macro(e: &Element) -> Option<Macro> {
+    let name = attribute(e, "name")?;
+    let info = read_infoattrs(e)?;
+    let doc = read_infoelements(e)?;
+
+    let c_identifier = attribute(e, "identifier");
+
+    let mut param: Vec<MacroParam> = vec![];
+
+    let parameters = e.get_child("parameters")?;
+
+    for parameter in parameters.children.iter() {
+        if let Some(e) = parameter.as_element() {
+            if e.name == "parameter" {
+                let para = read_macro_param(e);
+                if let Some(para) = para {
+                    param.push(para);
+                }
+            }
+        }
+    }
+    Some(Macro {
+        info,
+        doc,
+        name,
+        c_identifier,
+        parameters: param,
+    })
+}
+
+fn read_signal(e: &Element) -> Option<Signal> {
+    let name = attribute(e, "name")?;
+    let info = read_infoattrs(e)?;
+    let doc = read_infoelements(e)?;
+
+    let detailed = attr_bool(e, "detailed");
+    let when = attribute(e, "action");
+    let action = attr_bool(e, "action");
+    let no_hooks = attr_bool(e, "detailed");
+    let no_recurse = attr_bool(e, "action");
+    let emitter = attribute(e, "detailed");
+
+    let ret = read_return(e);
+    let parameters = read_params(e).unwrap_or(vec![]);
+
+    Some(Signal { 
+        name,
+        info,
+        doc,
+        detailed,
+        when,
+        action,
+        no_hooks,
+        no_recurse,
+        emitter,
+        parameters,
+        ret,
+    })
+}
 
 fn read_function(e: &Element) -> Option<Function> {
     let name = attribute(e, "name")?;
@@ -264,7 +296,7 @@ fn read_function(e: &Element) -> Option<Function> {
 
 fn get_doc(e: &Element) -> Option<Doc> {
     let preserve_space = attribute(e, "space");
-    let preserve_white  = attribute(e, "whitespace");
+    let preserve_white = attribute(e, "whitespace");
     let filename = attribute(e, "filename")?;
     let line = attribute(e, "line")?;
     let column = attribute(e, "column");
@@ -280,7 +312,7 @@ fn get_doc(e: &Element) -> Option<Doc> {
 }
 fn get_doc_versioned(e: &Element) -> Option<DocVersioned> {
     let preserve_space = attribute(e, "space");
-    let preserve_white  = attribute(e, "whitespace");
+    let preserve_white = attribute(e, "whitespace");
     let content = e.get_text().map(|x| x.into())?;
     Some(DocVersioned{
         preserve_space,
@@ -312,7 +344,32 @@ fn get_source_position(e: &Element) -> Option<DocPosition> {
 // }
 
 fn read_property(e: &Element) -> Option<Property> {
-    None
+    let name = attribute(e, "name")?;
+    let info = read_infoattrs(e)?;
+    let doc = read_infoelements(e)?;
+
+    let readable = attr_bool(e, "readable");
+    let writable = attr_bool(e, "writable");
+    let construct = attr_bool(e, "construct");
+    let construct_only = attr_bool(e, "construct-only");
+    let setter = attribute(e, "setter");
+    let getter = attribute(e, "getter");
+    let transfer = attr_value(e, "transfer");
+    let typ = read_anytype(e)?;
+
+    Some(Property{
+        name,
+        info,
+        doc,
+        readable,
+        writable,
+        construct,
+        construct_only,
+        setter,
+        getter,
+        transfer,
+        typ,
+    })
 }
 
 pub fn attr_bool(e: &Element, name: &str) -> Option<bool>
@@ -410,6 +467,14 @@ fn read_class(e: &Element) -> Option<Class> {
     let mut virtual_method = vec![];
     let mut callbacks = vec![];
 
+    let mut record = vec![];
+    let mut fields = vec![];
+    let mut signals = vec![];
+    let mut unions = vec![];
+    let mut constant = vec![];
+    let mut properties = vec![];
+    let mut implements = vec![];
+
     let doc = read_infoelements(e)?;
 
     for node in e.children.iter() {
@@ -440,23 +505,43 @@ fn read_class(e: &Element) -> Option<Class> {
                         callbacks.push(fun)
                     }
                 }
-                // "property" => {
-                //     if let Some(prop) = read_property(e) {
-                //         class.properties.push(prop)
-                //     }
-                // }
-                // "signal" => {
-                //     if let Some(fun) = read_signal(e) {
-                //         class.signals.push(fun)
-                //     }
-                // }
-                // "implements" => {
-                //     if let Some((typ, ctype, _)) = read_type(e, false) {
-                //         class.implements.push(typ)
-                //     }
-                // }
+                "union" => { 
+                    if let Some(fun) = read_union(e) {
+                        unions.push(fun)
+                    }
+                }
+                "constant" => { 
+                    if let Some(fun) = read_constant(e) {
+                        constant.push(fun)
+                    }
+                }
+                "record" => { 
+                    if let Some(fun) = read_record(e) {
+                        record.push(fun)
+                    }
+                }
+                "field" => { 
+                    if let Some(fun) = read_field(e) {
+                        fields.push(fun)
+                    }
+                }
+                "property" => {
+                    if let Some(prop) = read_property(e) {
+                        properties.push(prop)
+                    }
+                }
+                "signal" => {
+                    if let Some(fun) = read_signal(e) {
+                        signals.push(fun)
+                    }
+                }
+                "implements" => {
+                    if let Some(str) = attribute(e, "name"){
+                        implements.push(str)
+                    }
+                }
                 name => {
-                    // panic!("Name: {} not matched against\n", name)
+                    panic!("Name: {} not matched against\n", name)
                 }
             }
         }
@@ -483,56 +568,199 @@ fn read_class(e: &Element) -> Option<Class> {
         virtual_method,
         callbacks,
         doc,
+        record,
+        fields,
+        signals,
+        unions,
+        constant,
+        properties,
+        implements,
     })
 }
 
-// fn read_constant(e: &Element) -> Option<Constant> {
-//     let name = e.attributes.get("name")?.to_string();
-//     let c_identifier = e.attributes.get("type")?.to_string();
-//     let value = e.attributes.get("value")?.to_string();
-//     let introspectable = get_introspectable(e, true);
-//
-//     let version = e.attributes.get("version").map(|x| x.to_string());
-//     let deprecated_version = e.attributes.get("deprecated-version").map(|x| x.to_string());
-//
-//     let mut inner = None;
-//     let mut doc = None;
-//     let mut doc_deprecated = None;
-//
-//     let mut typ = None;
-//     for node in e.children {
-//         let e = node.as_element()?;
-//         match e.name.as_ref() {
-//             "type" | "array" => {
-//                 if typ.is_some() {
-//                     return None;
-//                 }
-//                 typ = read_type(e, e.name == "array");
-//             }
-//             "doc" => doc = get_doc(e),
-//             "doc-deprecated" => doc_deprecated = get_doc(e),
-//             "attribute" => {}
-//             "source-position" => {}
-//             "attribute" => {}
-//             _ => panic!("Error parsing param")
-//         }
-//     }
-//     if let Some((typ, c_type, _)) = typ {
-//         return Some(Constant {
-//             name,
-//             c_identifier,
-//             introspectable,
-//             typ,
-//             c_type,
-//             value,
-//             version,
-//             deprecated_version,
-//             doc,
-//             doc_deprecated
-//         })
-//     }
-//     None
-// }
+fn read_field(e: &Element) -> Option<Field> {
+    let name = attribute(e, "name")?;
+    let info = read_infoattrs(e)?;
+    let doc = read_infoelements(e)?;
+    
+    let typ = read_anytype(e)?;
+    let writeable = attr_bool(e, "writeable");
+    let readable = attr_bool(e, "readable");
+    let private = attr_bool(e, "private");
+    let bits = attr_value(e, "bits");
+
+    Some(Field {
+        name,
+        info,
+        doc,
+        typ,
+        writeable,
+        readable,
+        private,
+        bits,
+    })
+}
+
+fn read_record(e: &Element) -> Option<Record> {
+    let name = attribute(e, "name")?;
+    let info = read_infoattrs(e)?;
+    let doc = read_infoelements(e)?;
+
+    let c_type = attribute(e, "value");
+    let disguised = attr_bool(e, "disguised");
+    let symbol_prefix = attribute(e, "symbol-prefix");
+    let glib_get_type = attribute(e, "get-type");
+    let glib_type_name = attribute(e, "type-name");
+    let glib_is_gtype_struct_for = attribute(e, "is-gtype-struct-for");
+    let foreign = attr_bool(e, "foreign");
+
+    let mut constructor = vec![];
+    let mut functions = vec![];
+    let mut method = vec![];
+
+    let mut fields = vec![];
+    let mut unions = vec![];
+
+    for node in e.children.iter() {
+        if let Some(e) = node.as_element() {
+            match e.name.as_str() {
+                "constructor" => {
+                    if let Some(fun) = read_function(e) {
+                        constructor.push(fun)
+                    }
+                }
+                "function" => {
+                    if let Some(fun) = read_function(e) {
+                        functions.push(fun)
+                    }
+                }
+                "method" => {
+                    if let Some(fun) = read_function(e) {
+                        method.push(fun)
+                    }
+                }
+                "union" => { 
+                    if let Some(fun) = read_union(e) {
+                        unions.push(fun)
+                    }
+                }
+                "field" => { 
+                    if let Some(fun) = read_field(e) {
+                        fields.push(fun)
+                    }
+                }
+                name => {
+                    panic!("Name: {} not matched against\n", name)
+                }
+            }
+        }
+    }
+    Some(Record{
+        name,
+        info,
+        doc,
+        c_type,
+        disguised,
+        symbol_prefix,
+        glib_get_type,
+        glib_type_name,
+        glib_is_gtype_struct_for,
+        foreign,
+        fields,
+        unions,
+        constructor,
+        functions,
+        method,
+    })
+}
+
+fn read_constant(e: &Element) -> Option<Constant> {
+    let name = attribute(e, "name")?;
+    let info = read_infoattrs(e)?;
+    let doc = read_infoelements(e)?;
+
+    let name = attribute(e, "name")?;
+    let value = attribute(e, "value")?;
+    let c_identifier = attribute(e, "identifier");
+    let c_type = attribute(e, "type");
+    let typ = read_anytype(e);
+
+    return Some(Constant {
+        name,
+        c_identifier,
+        info,
+        doc,
+        value,
+        c_type,
+        typ,
+    })
+}
+fn read_union(e: &Element) -> Option<Union> {
+    let name = attribute(e, "name");
+    let c_type = attribute(e, "type");
+    let glib_type_name = attribute(e, "type-name");
+    let glib_get_type = attribute(e, "get-type");
+    let symbol_prefix = attribute(e, "symbol-prefix");
+
+    let info = read_infoattrs(e)?;
+    let doc = read_infoelements(e)?;
+
+    let mut constructor = vec![];
+    let mut functions = vec![];
+    let mut method = vec![];
+
+    let mut record = vec![];
+    let mut fields = vec![];
+    for node in e.children.iter() {
+        if let Some(e) = node.as_element() {
+            match e.name.as_str() {
+                "constructor" => {
+                    if let Some(fun) = read_function(e) {
+                        constructor.push(fun)
+                    }
+                }
+                "function" => {
+                    if let Some(fun) = read_function(e) {
+                        functions.push(fun)
+                    }
+                }
+                "method" => {
+                    if let Some(fun) = read_function(e) {
+                        method.push(fun)
+                    }
+                }
+                "record" => { 
+                    if let Some(fun) = read_record(e) {
+                        record.push(fun)
+                    }
+                }
+                "field" => { 
+                    if let Some(fun) = read_field(e) {
+                        fields.push(fun)
+                    }
+                }
+                name => {
+                    panic!("Name: {} not matched against\n", name)
+                }
+            }
+        }
+    }
+
+    Some(Union {
+        name,
+        info,
+        doc,
+        c_type,
+        symbol_prefix,
+        glib_type_name,
+        glib_get_type,
+        fields,
+        constructor,
+        method,
+        functions,
+        record,
+    })
+}
 
 // fn read_bitfield(e: &Element) -> Option<Comp> {
 //     let name = e.attributes.get("name")?;
@@ -563,15 +791,19 @@ fn read_namespace(e: &Element) -> Option<Namespace> {
     let identifier_prefixes = attribute(e, "identifier-prefixes");
     let symbol_prefixes= attribute(e, "symbol-prefixes");
     let prefix = attribute(e, "prefix");
+    // let shared_library = s.split(',').collect();
 
 
     let mut classes = vec![];
     let mut functions = vec![];
     let mut macros = vec![];
     let mut callback = vec![];
-    // if let Some(s) = attribute(e, "shared-library") {
-    //     ns.shared_library = s.split(',').collect();
-    // }
+
+    let mut enums = vec![];
+    let mut record = vec![];
+    let mut constant = vec![];
+    let mut bitfield = vec![];
+
     for node in e.children.iter() {
         if let Some(e) = node.as_element() {
             match e.name.as_str() {
@@ -586,7 +818,7 @@ fn read_namespace(e: &Element) -> Option<Namespace> {
                     }
                 }
                 "function-macro" => {
-                    if let Some(fun) = read_function(e) {
+                    if let Some(fun) = read_macro(e) {
                         macros.push(fun);
                     }
                 }
@@ -595,40 +827,40 @@ fn read_namespace(e: &Element) -> Option<Namespace> {
                         callback.push(cb);
                     }
                 }
-                // "enumeration" => {
-                //     if let Some(enu) = read_enum(e) {
-                //         ns.enums.push(enu);
-                //     }
-                // }
-                // "record" => {
-                //     if let Some(record) = read_record(e) {
-                //         ns.record.push(record);
-                //     }
-                // }
-                // "constant" => {
-                //     if let Some(consts) = read_constant(e) {
-                //         ns.constant.push(consts);
-                //     }
-                // }
-                // "bitfield" => {
-                //     if let Some(bf) = read_bitfield(e) {
-                //         ns.bitfield.push(bf)
-                //     }
-                // }
-                // "docsection" => {
-                //     // println!("{:#?}", e)
-                //     ns.doc = get_doc(e)
-                // }
-                // "name" => {
-                //     println!("{:#?}", e)
-                // }
-                // "alias" => {
-                //     // println!("{:#?}", e)
-                // }
-                // "interface" => {
-                // }
-                // "boxed" => {
-                // }
+                "enumeration" => {
+                    if let Some(enu) = read_enum(e) {
+                        enums.push(enu);
+                    }
+                }
+                "record" => {
+                    if let Some(rec) = read_record(e) {
+                        record.push(rec);
+                    }
+                }
+                "constant" => {
+                    if let Some(consts) = read_constant(e) {
+                        constant.push(consts);
+                    }
+                }
+                "bitfield" => {
+                    if let Some(bf) = read_bitfield(e) {
+                        bitfield.push(bf)
+                    }
+                }
+                "docsection" => {
+                    // println!("{:#?}", e)
+                    // ns.doc = get_doc(e)
+                }
+                "name" => {
+                    println!("{:#?}", e)
+                }
+                "alias" => {
+                    // println!("{:#?}", e)
+                }
+                "interface" => {
+                }
+                "boxed" => {
+                }
                 name => {
                     // panic!("Name: {} not matched against\n", name)
                 }
@@ -647,6 +879,111 @@ fn read_namespace(e: &Element) -> Option<Namespace> {
         macros,
         callback,
     })
+}
+fn read_bitfield(e: &Element) -> Option<Bitfield> {
+    let info = read_infoattrs(e)?;
+    let doc = read_infoelements(e)?;
+    let name = attribute(e, "name")?;
+
+    let c_type = attribute(e, "type")?;
+    let glib_type_name = attribute(e, "type-name");
+    let glib_get_type = attribute(e, "get-type");
+
+    let mut functions = vec![];
+    let mut members = vec![];
+
+    for node in e.children.iter() {
+        if let Some(e) = node.as_element() {
+            match e.name.as_str() {
+                "function" => {
+                    if let Some(fun) = read_function(e) {
+                        functions.push(fun);
+                    }
+                }
+                "member" => {
+                    if let Some(mem) = read_member(e) {
+                        members.push(mem);
+                    }
+                }
+                name => {
+                    panic!("Name: {} not matched against\n", name)
+                }
+            }
+        }
+    }
+    Some(Bitfield {
+        info,
+        doc,
+        name,
+        c_type,
+        glib_type_name,
+        glib_get_type,
+        members,
+        functions,
+    })
+}
+
+fn read_member(e: &Element) -> Option<Member> {
+    let info = read_infoattrs(e)?;
+    let doc = read_infoelements(e)?;
+    let name = attribute(e, "name")?;
+    let value = attribute(e, "value")?;
+    let c_identifier = attribute(e, "identifier");
+    let glib_nick = attribute(e, "nick");
+
+    Some(Member{
+        info,
+        doc,
+        name,
+        value,
+        c_identifier,
+        glib_nick,
+    })
+}
+
+fn read_enum(e: &Element) -> Option<Enumeration> {
+    let name = attribute(e, "name")?;
+    let info = read_infoattrs(e)?;
+    let doc = read_infoelements(e)?;
+
+    let c_type = attribute(e, "type")?;
+    let glib_type_name = attribute(e, "type-name");
+    let glib_get_type = attribute(e, "get-type");
+    let glib_error_domain = attribute(e, "error-domain");
+
+    let mut members = vec![];
+    let mut functions = vec![];
+    for node in e.children.iter() {
+        if let Some(e) = node.as_element() {
+            match e.name.as_str() {
+                "member" => {
+                    if let Some(class) = read_member(e) {
+                        members.push(class);
+                    }
+                }
+                "function" => {
+                    if let Some(fun) = read_function(e) {
+                        functions.push(fun);
+                    }
+                }
+                name => {
+                    panic!("Name: {} not matched against\n", name)
+                }
+            }
+        }
+    }
+    Some(Enumeration{
+        info,
+        doc,
+        name,
+        c_type,
+        glib_type_name,
+        glib_get_type,
+        glib_error_domain,
+        members,
+        functions,
+    })
+
 }
 
 pub fn attribute(e: &Element, attr: &str) -> Option<String> {
@@ -724,7 +1061,6 @@ fn read_repository(e: &Element) -> Option<Repository> {
                         namespace.push(ns)
                     }
                 }
-                "attribute" => { }
                 name => {
                     panic!("Name: {} not matched against\n", name)
                 }
