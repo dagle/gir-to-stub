@@ -1,26 +1,164 @@
+/// Bindings for the lgi, the standard lua loader
 
-// changed means that we have translated the gir
-// type to a *lua* type. Like changing a gchar *
-// to a lua string (because lgi does this).
+use std::io::Write;
+use crate::library::*;
 
-// Unchanged is when the type is the same, a gtk
-// window is a gtk window in C, lua etc. The only difference
-// can be the namespace etc.
+struct LuaDoc {}
+struct LuaCodegen {}
+type Result<T> = std::io::Result<T>;
 
-// Popped is when a variable changes position in the binding.
-// Example: int dostuff(Ctx *ctx, err **Error) would be in lua
-// int, err = dostuff(ctx) and then the lgi dynamically creates a new
-// error when called.
+// we need 3 versions of show_function. 1 to only show the name (Function.name?),
+// show function with without definition, types or return (but arguments)
+// then show with everything: function my_function(args) (used for lsp)
+impl LuaDoc {
+    fn show_function(&self, fun: &Function) -> String {
+    }
 
-// Removed is for arguments not applicable to the language binding.
-// Example: if your language supports closures with scope, maybe the
-// binding will remove having a data pointer.
-enum Translate {
-    Changed(String),
-    UnChanged(String),
-    Popped(String),
-    Removed,
+    fn show_callback(&self, fun: &Function) -> String {
+    }
+
+    fn show_class(&self, class: &Class) -> String {
+    }
+
+    fn show_enum(&self, enu: &Enumeration) -> String {
+    }
+
+    fn show_record(&self, rec: &Record) -> String {
+    }
+
+    fn show_constant(&self, constant: &Constant) -> String {
+    }
+
+    fn show_type(&self, typ: AnyType) -> String {
+    }
 }
+
+
+impl Namespace {
+    pub fn gen<W: Write>(&self, ns: Option<String>, w: &mut W) -> Result<()> {
+        let name = self.name.unwrap_or_else(|| ns.unwrap_or("".to_owned()));
+        writeln!(w, "local {} = {{}}", name);
+        // set up meta table
+
+        
+        if !self.classes.is_empty() {
+            // create_section(&self.ns, "Functions", w)?;
+            for class in self.classes {
+                class.gen(name, w);
+                writeln!(w, "{}.{} = {}", name, class.name, class.name);
+            }
+        }
+        if !self.functions.is_empty() {
+            for function in self.functions {
+                function.gen(name, w);
+                writeln!(w, "{}.{} = {}", name, function.name, function.name);
+            }
+        }
+        let ns = Some(name);
+        if !self.enums.is_empty() {
+            for enu in self.enums {
+                enu.gen(ns, w);
+                writeln!(w, "{}.{} = {}", name, enu.name, enu.name);
+            }
+        }
+        if !self.record.is_empty() {
+            for record in self.record {
+                record.gen(ns, w);
+                writeln!(w, "{}.{} = {}", name, record.name, record.name);
+            }
+        }
+        if !self.constant.is_empty() {
+            for cons in self.constant {
+                cons.gen(ns, w);
+                writeln!(w, "{}.{} = {}", name, cons.name, cons.name);
+            }
+        }
+        if !self.bitfield.is_empty() {
+            for bitfield in self.bitfield {
+                bitfield.gen(ns, w);
+                writeln!(w, "{}.{} = {}", name, bitfield.name, bitfield.name);
+            }
+        }
+        w.flush()?;
+        Ok(())
+    }
+}
+
+impl Class {
+    pub fn gen<W: Write>(&self, ns: String, w: &mut W) -> Result<()> {
+        let name = self.name;
+        writeln!(w, "local {} = {{}}", name);
+        // 
+
+        if !self.fields.is_empty() {
+            for field in self.fields {
+                // let str = format!("{}.{}", static_ns, field.0);
+                // w.write_all(&str.as_bytes())?;
+                writeln!(w, "")?;
+                writeln!(w, "{}.{} = {}", name, field.name, field.name);
+            }
+        }
+
+        // constructors are speciall because they return an object?
+        if !self.constructor.is_empty() {
+            for constructor in self.constructor {
+                constructor.gen(name, w);
+                writeln!(w, "{}.{} = {}", name, constructor.name, constructor.name);
+            }
+        }
+        if !self.method.is_empty() {
+            for method in self.method {
+                writeln!(w, "")?;
+                writeln!(w, "{}.{} = {}", name, method.name, method.name);
+            }
+        }
+        if !self.functions.is_empty() {
+            for func in self.functions {
+                writeln!(w, "")?;
+                writeln!(w, "{}.{} = {}", name, func.name, func.name);
+            }
+        }
+        if !self.virtual_method.is_empty() {
+            for virt in self.virtual_method {
+                writeln!(w, "")?;
+                writeln!(w, "{}.{} = {}", name, virt.name, virt.name);
+            }
+        }
+
+        Ok(())
+    }
+}
+
+impl Function {
+    pub fn gen<W: Write>(&self, ns: String, w: &mut W) -> Result<()> {
+        Ok(())
+    }
+}
+
+impl Enumeration {
+    pub fn gen<W: Write>(&self, ns: Option<String>, w: &mut W) -> Result<()> {
+        Ok(())
+    }
+}
+
+impl Record {
+    pub fn gen<W: Write>(&self, ns: Option<String>, w: &mut W) -> Result<()> {
+        Ok(())
+    }
+}
+
+impl Constant {
+    pub fn gen<W: Write>(&self, ns: Option<String>, w: &mut W) -> Result<()> {
+        Ok(())
+    }
+}
+
+impl Bitfield {
+    pub fn gen<W: Write>(&self, ns: Option<String>, w: &mut W) -> Result<()> {
+        Ok(())
+    }
+}
+
 
 pub trait Langbinding {
 

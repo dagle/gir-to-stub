@@ -7,4 +7,5 @@ edition = "2021"
 
 [dependencies]
 chrono = "0.4.22"
+clap = "4.0.10"
 xmltree = "0.10.3"

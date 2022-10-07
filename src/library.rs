@@ -1,10 +1,11 @@
-type _Type = String;
-type Nullable = bool;
-type Version = String;
+// TODO Fix version to Version in structs
+
+#[derive(Debug)]
+pub struct Version(pub u16, pub u16, pub u16);
 
 #[derive(Debug)]
 pub struct Repository {
-    pub version: Option<String>,
+    pub version: Option<Version>,
     pub xmlns: Option<String>,
     pub identifier_prefixes: Option<String>,
     pub symbol_prefixes : Option<String>,
@@ -30,7 +31,7 @@ pub struct Package {
     pub name: String,
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct Namespace {
     pub name: Option<String>,
 
@@ -47,20 +48,17 @@ pub struct Namespace {
     pub macros: Vec<Macro>,
     pub callback: Vec<Function>,
 
-    // pub interfaces: Vec<Interface>,
-    // pub enums: Vec<Enumeration>,
-    // pub record: Vec<Record>,
-    // pub constant: Vec<Constant>,
-    // pub bitfield: Vec<Bitfield>,
-    // pub alias: Vec<Alias>,
-    // pub unions: Vec<Union>,
-    // pub boxed: Vec<Boxed>,
-
-    // pub doc: Option<String>,
-    // pub doc_deprecated: Option<String>,
+    pub interfaces: Vec<Interface>,
+    pub enums: Vec<Enumeration>,
+    pub record: Vec<Record>,
+    pub constant: Vec<Constant>,
+    pub bitfield: Vec<Bitfield>,
+    pub alias: Vec<Alias>,
+    pub unions: Vec<Union>,
+    pub boxed: Vec<Boxed>,
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct InfoAttrs {
     pub introspectable: Option<bool>,
     pub deprecated: Option<String>,
@@ -69,7 +67,7 @@ pub struct InfoAttrs {
     pub stability: Option<String>,
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct InfoElements {
     pub doc: Option<Doc>,
     pub doc_stability: Option<DocVersioned>,
@@ -78,7 +76,7 @@ pub struct InfoElements {
     pub doc_pos: Option<DocPosition>,
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct Doc {
     pub preserve_space: Option<String>,
     pub preserve_white: Option<String>,
@@ -88,22 +86,21 @@ pub struct Doc {
     pub content: String,
 }
 
-// doc-versioned
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct DocVersioned {
     pub preserve_space: Option<String>,
     pub preserve_white: Option<String>,
     pub content: String,
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct DocPosition {
     pub filename: String,
     pub line: String,
     pub column: Option<String>,
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct Class {
     pub info: InfoAttrs,
 
@@ -147,7 +144,7 @@ pub struct Class {
 
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct Record {
     pub name: String,
     pub info: InfoAttrs,
@@ -169,34 +166,30 @@ pub struct Record {
     pub method: Vec<Function>,
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct Interface {
     pub name: String,
+    pub info: InfoAttrs,
+    pub doc: InfoElements,
 
-    pub c_type: String,
-    pub symbol_prefix: String,
-    pub type_struct: Option<String>,
-    pub introspectable: bool,
-    // pub c_class_type: Option<String>,
-    // pub glib_get_type: String,
+    pub glib_type_name: String,
+    pub glib_get_type: String,
+    pub symbol_prefix: Option<String>,
+    pub c_type: Option<String>,
+    pub glib_type_struct: Option<String>,
 
-    // pub functions: Vec<Function>,
-    // this should work?
-
-    pub constructor: Vec<Function>,
+    pub constructor: Option<Function>,
+    pub prerequisites: Vec<String>,
+    pub implements: Vec<String>,
     pub functions: Vec<Function>,
     pub method: Vec<Function>,
-    pub virt: Vec<Function>,
+    pub virtual_method: Vec<Function>,
+    pub callbacks: Vec<Function>,
 
-    pub signals: Vec<Signal>,
+    pub fields: Vec<Field>,
     pub properties: Vec<Property>,
-    pub prerequisites: Vec<_Type>,
-
-    pub version: Option<Version>,
-    pub deprecated_version: Option<Version>,
-
-    pub doc: Option<String>,
-    pub doc_deprecated: Option<String>,
+    pub signals: Vec<Signal>,
+    pub constant: Vec<Constant>,
 }
 
 #[derive(Debug)]
@@ -243,7 +236,7 @@ pub struct Enumeration {
     pub functions: Vec<Function>,
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct Macro {
     pub info: InfoAttrs,
     pub doc: InfoElements,
@@ -254,10 +247,11 @@ pub struct Macro {
     pub parameters: Vec<MacroParam>,
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct Function {
     pub info: InfoAttrs,
     pub doc: InfoElements,
+    // TODO add kind
     
     pub name: String,
     pub c_identifier: Option<String>,
@@ -270,7 +264,7 @@ pub struct Function {
     pub ret: Option<Parameter>,
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct Union {
     pub name: Option<String>,
     pub info: InfoAttrs,
@@ -307,30 +301,24 @@ pub struct Signal {
 
 #[derive(Debug)]
 pub struct Boxed {
-    pub name: String,
+    pub glib_name: String,
+    pub info: InfoAttrs,
+    pub doc: InfoElements,
 
-    pub typename: Option<String>,
-    pub get_type: Option<_Type>,
-    pub parameters: Vec<Parameter>,
-    pub introspectable: bool,
-    pub funs: Vec<Function>,
+    pub symbol_prefix: Option<String>,
+    pub glib_type_name: Option<String>,
+    pub glib_get_type: Option<String>,
 
-    pub version: Option<Version>,
-    pub deprecated_version: Option<Version>,
-
-    pub doc: Option<String>,
-    pub doc_deprecated: Option<String>,
+    pub functions: Vec<Function>,
 }
 
 #[derive(Debug)]
 pub struct Alias {
     pub name: String,
-    pub introspectable: bool,
-    pub c_identifier: String,
-    pub typ: _Type,
-    pub target_c_type: String,
-    pub doc: Option<String>,
-    pub doc_deprecated: Option<String>,
+    pub info: InfoAttrs,
+    pub doc: InfoElements,
+    pub c_type: String,
+    pub typ: AnyType,
 }
 
 
@@ -437,7 +425,6 @@ pub struct Field {
 }
 
 #[derive(Debug)]
-
 pub struct Property {
     pub name: String,
     pub info: InfoAttrs,

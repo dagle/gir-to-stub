@@ -1,9 +1,6 @@
-// use crate::vimdoc::*;
 use crate::library::*;
 use xmltree::Element;
 use core::fmt;
-// use std::any::Any;
-// use std::default::default;
 use std::io::Read;
 use std::str::FromStr;
 
@@ -21,6 +18,28 @@ impl FromStr for ParameterScope {
             "async" => Ok(ParameterScope::Async),
             "notified" => Ok(ParameterScope::Notified),
             _ => Err(format!("Unknown parameter scope type: {}", name)),
+        }
+    }
+}
+
+impl FromStr for Version {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Version, String> {
+        if s.contains('.') {
+            let mut parts = s
+                .splitn(4, '.')
+                .map(str::parse)
+                .take_while(Result::is_ok)
+                .map(Result::unwrap);
+            Ok(Version(
+                parts.next().unwrap_or(0),
+                parts.next().unwrap_or(0),
+                parts.next().unwrap_or(0),
+            ))
+        } else {
+            let val = s.parse::<u16>();
+            Ok(Version(val.unwrap_or(0), 0, 0))
         }
     }
 }
@@ -48,17 +67,6 @@ impl FromStr for Transfer {
             _ => Err(format!("Unknown parameter direction '{}'", name)),
         }
     }
-}
-fn read_type(e: &Element, is_array: bool) -> Option<(String, Option<String>, Option<u32>)> {
-    if is_array {
-        let typ = e.get_child("type")?.attributes.get("name")?.to_string();
-       let ctype = e.attributes.get("type").map(|x| x.to_string());
-        let length = e.attributes.get("length").map(|x| x.parse().unwrap_or(1));
-        return Some((typ, ctype, length))
-    }
-    let typ = e.attributes.get("name")?.to_string();
-    let ctype = e.attributes.get("type").map(|x| x.to_string());
-    Some((typ, ctype, None))
 }
 
 fn get_attribute(e: &Element, attr: &str) -> Option<String> {
@@ -174,29 +182,6 @@ fn read_params(e: &Element) -> Option<Vec<Parameter>> {
     return Some(ret)
 }
 
-// fn read_inner_doc(e: &Element) -> Option<String> {
-//     e.get_child("doc").map(|doc| get_doc(doc)).flatten()
-// }
-// fn read_inner_doc_depricated(e: &Element) -> Option<String> {
-//     e.get_child("doc-deprecated").map(|doc| get_doc(doc)).flatten()
-// }
-//
-// fn get_inne_name<'a>(e: &'a Element, name: &'a str) -> Option<&'a String> {
-//     e.get_child(name).map(|doc| doc.attributes.get("name")).flatten()
-// }
-//
-// fn get_inner_type(e: &Element) -> Option<&String> {
-//     e.get_child("type").map(|doc| doc.attributes.get("name")).flatten()
-// }
-//
-// fn get_introspectable(e: &Element, def: bool) -> bool {
-//     e.attributes.get("introspectable").map(|x| x == "1").unwrap_or(def)
-// }
-//
-// fn attribute_bool(e: &Element, attr: &str, def: bool) -> bool {
-//     e.attributes.get(attr).map(|x| x == "1").unwrap_or(def)
-// }
-//
 fn read_macro_param(e: &Element) -> Option<MacroParam> {
     let name = attribute(e, "name")?;
     let doc = read_infoelements(e)?;
@@ -332,16 +317,6 @@ fn get_source_position(e: &Element) -> Option<DocPosition> {
     })
 }
 
-//
-// fn read_field(e: &Element) -> Option<Field> {
-//     let name = e.attributes.get("name")?;
-//     let private = e.attributes.get("private").unwrap_or(false);
-//     let introspectable = get_introspectable(e, false);
-//     let bits = e.attributes.get("bits").and_then(|s| s.parse().ok());
-//     let doc = read_inner_doc(e)?;
-//     let Some(typ, ctype, _) = read_type(e, false);
-//     Some((name.to_string(), doc))
-// }
 
 fn read_property(e: &Element) -> Option<Property> {
     let name = attribute(e, "name")?;
@@ -540,8 +515,7 @@ fn read_class(e: &Element) -> Option<Class> {
                         implements.push(str)
                     }
                 }
-                name => {
-                    panic!("Name: {} not matched against\n", name)
+                _ => {
                 }
             }
         }
@@ -649,8 +623,7 @@ fn read_record(e: &Element) -> Option<Record> {
                         fields.push(fun)
                     }
                 }
-                name => {
-                    panic!("Name: {} not matched against\n", name)
+                _ => {
                 }
             }
         }
@@ -740,7 +713,6 @@ fn read_union(e: &Element) -> Option<Union> {
                     }
                 }
                 name => {
-                    panic!("Name: {} not matched against\n", name)
                 }
             }
         }
@@ -803,6 +775,10 @@ fn read_namespace(e: &Element) -> Option<Namespace> {
     let mut record = vec![];
     let mut constant = vec![];
     let mut bitfield = vec![];
+    let mut interfaces = vec![];
+    let mut alias = vec![];
+    let mut unions = vec![];
+    let mut boxed = vec![];
 
     for node in e.children.iter() {
         if let Some(e) = node.as_element() {
@@ -848,21 +824,25 @@ fn read_namespace(e: &Element) -> Option<Namespace> {
                     }
                 }
                 "docsection" => {
-                    // println!("{:#?}", e)
-                    // ns.doc = get_doc(e)
                 }
                 "name" => {
-                    println!("{:#?}", e)
                 }
                 "alias" => {
-                    // println!("{:#?}", e)
+                    if let Some(bf) = read_alias(e) {
+                        alias.push(bf)
+                    }
                 }
                 "interface" => {
+                    if let Some(bf) = read_interface(e) {
+                        interfaces.push(bf)
+                    }
                 }
                 "boxed" => {
+                    if let Some(bf) = read_boxed(e) {
+                        boxed.push(bf)
+                    }
                 }
-                name => {
-                    // panic!("Name: {} not matched against\n", name)
+                _ => {
                 }
             }
         }
@@ -878,8 +858,180 @@ fn read_namespace(e: &Element) -> Option<Namespace> {
         functions,
         macros,
         callback,
+        interfaces,
+        enums,
+        record,
+        constant,
+        bitfield,
+        alias,
+        unions,
+        boxed,
     })
 }
+
+fn read_alias(e: &Element) -> Option<Alias> {
+    let info = read_infoattrs(e)?;
+    let doc = read_infoelements(e)?;
+    let name = attribute(e, "name")?;
+    let c_type = attribute(e, "type")?;
+    let typ = read_anytype(e)?;
+
+    let mut functions = vec![];
+
+    for node in e.children.iter() {
+        if let Some(e) = node.as_element() {
+            match e.name.as_str() {
+                "constructor" => {
+                    if let Some(fun) = read_function(e) {
+                        functions.push(fun) 
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    Some(Alias {
+        name,
+        info,
+        doc,
+        c_type,
+        typ,
+    })
+}
+
+fn read_interface(e: &Element) -> Option<Interface> {
+    let info = read_infoattrs(e)?;
+    let doc = read_infoelements(e)?;
+    let name = attribute(e, "name")?;
+
+    let glib_type_name = attribute(e, "type-name")?;
+    let glib_get_type = attribute(e, "get-type")?;
+    let symbol_prefix = attribute(e, "symbol-prefix");
+    let c_type = attribute(e, "type");
+    let glib_type_struct = attribute(e, "type-struct");
+
+    let mut constructor = None;
+    let mut functions = vec![];
+    let mut method = vec![];
+    let mut virtual_method = vec![];
+    let mut callbacks = vec![];
+
+    let mut prerequisites = vec![];
+    let mut implements = vec![];
+
+    let mut fields = vec![];
+    let mut signals = vec![];
+    let mut constant = vec![];
+    let mut properties = vec![];
+
+    let doc = read_infoelements(e)?;
+
+    for node in e.children.iter() {
+        if let Some(e) = node.as_element() {
+            match e.name.as_str() {
+                "constructor" => {
+                    if let Some(fun) = read_function(e) {
+                        constructor = Some(fun)
+                    }
+                }
+                "function" => {
+                    if let Some(fun) = read_function(e) {
+                        functions.push(fun)
+                    }
+                }
+                "method" => {
+                    if let Some(fun) = read_function(e) {
+                        method.push(fun)
+                    }
+                }
+                "virtual-method" => { 
+                    if let Some(fun) = read_function(e) {
+                        virtual_method.push(fun)
+                    }
+                }
+                "callback" => { 
+                    if let Some(fun) = read_function(e) {
+                        callbacks.push(fun)
+                    }
+                }
+                "constant" => { 
+                    if let Some(fun) = read_constant(e) {
+                        constant.push(fun)
+                    }
+                }
+                "field" => { 
+                    if let Some(fun) = read_field(e) {
+                        fields.push(fun)
+                    }
+                }
+                "property" => {
+                    if let Some(prop) = read_property(e) {
+                        properties.push(prop)
+                    }
+                }
+                "signal" => {
+                    if let Some(fun) = read_signal(e) {
+                        signals.push(fun)
+                    }
+                }
+                "prerequisites" => {
+                    if let Some(str) = attribute(e, "name"){
+                        prerequisites.push(str)
+                    }
+                }
+                "implements" => {
+                    if let Some(str) = attribute(e, "name"){
+                        implements.push(str)
+                    }
+                }
+                _ => {
+                }
+            }
+        }
+    }
+    Some(Interface {
+        name,
+        info,
+        doc,
+        glib_type_name,
+        glib_get_type,
+        symbol_prefix,
+        c_type,
+        glib_type_struct,
+        constructor,
+        prerequisites,
+        implements,
+        functions,
+        method,
+        virtual_method,
+        callbacks,
+        fields,
+        properties,
+        signals,
+        constant,
+    })
+}
+
+fn read_boxed(e: &Element) -> Option<Boxed> {
+    let info = read_infoattrs(e)?;
+    let doc = read_infoelements(e)?;
+    let glib_name = attribute(e, "name")?;
+
+    let symbol_prefix = attribute(e, "symbol-prefix");
+    let glib_type_name = attribute(e, "type-name");
+    let glib_get_type = attribute(e, "get-type");
+
+    Some(Boxed {
+        glib_name,
+        info,
+        doc,
+        symbol_prefix,
+        glib_type_name,
+        glib_get_type,
+        functions: todo!(),
+    })
+}
+
 fn read_bitfield(e: &Element) -> Option<Bitfield> {
     let info = read_infoattrs(e)?;
     let doc = read_infoelements(e)?;
@@ -905,8 +1057,7 @@ fn read_bitfield(e: &Element) -> Option<Bitfield> {
                         members.push(mem);
                     }
                 }
-                name => {
-                    panic!("Name: {} not matched against\n", name)
+                _ => {
                 }
             }
         }
@@ -966,8 +1117,7 @@ fn read_enum(e: &Element) -> Option<Enumeration> {
                         functions.push(fun);
                     }
                 }
-                name => {
-                    panic!("Name: {} not matched against\n", name)
+                _ => {
                 }
             }
         }
@@ -1028,7 +1178,7 @@ fn read_package(e: &Element) -> Option<Package> {
 
 // should return repo?
 fn read_repository(e: &Element) -> Option<Repository> {
-    let version = attribute(e, "version");
+    let version = attr_value(e, "version");
     let xmlns = attribute(e, "xmlns");
     let identifier_prefixes = attribute(e, "identifier-prefixes");
     let symbol_prefixes = attribute(e, "symbol-prefixes");
@@ -1061,8 +1211,7 @@ fn read_repository(e: &Element) -> Option<Repository> {
                         namespace.push(ns)
                     }
                 }
-                name => {
-                    panic!("Name: {} not matched against\n", name)
+                _ => {
                 }
             }
         }
