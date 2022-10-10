@@ -107,8 +107,9 @@ fn read_anytype(e: &Element) -> Option<AnyType> {
                     let ctype = attribute(e, "type");
                     for node in e.children.iter() {
                         if let Some(e) = node.as_element() {
-                            let typ = read_anytype(e)?;
-                            let btyp = Box::new(typ);
+                            let typ = attribute(e, "name")?;
+                            // let typ = read_anytype(e)?;
+                            // let btyp = Box::new(typ);
                             return Some(AnyType::Array(Array{
                                 name,
                                 zero_terminated,
@@ -116,7 +117,7 @@ fn read_anytype(e: &Element) -> Option<AnyType> {
                                 introspectable,
                                 length,
                                 ctype,
-                                typ: btyp,
+                                typ,
                             }))
                         }
                     }
@@ -139,7 +140,7 @@ fn read_param(e: &Element) -> Option<Parameter> {
     let closure = attribute(e, "closure");
     let destroy = attribute(e, "destroy");
     let scope = attribute(e, "scope");
-    let direction = attribute(e, "direction");
+    let direction = attr_value(e, "direction");
     let caller_allocates = attribute(e, "caller-allocates");
     let optional = attribute(e, "optional");
     let skip = attribute(e, "skip");

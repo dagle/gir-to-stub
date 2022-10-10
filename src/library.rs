@@ -373,7 +373,7 @@ pub struct Parameter {
     pub closure: Option<String>,
     pub destroy: Option<String>,
     pub scope: Option<String>,
-    pub direction: Option<String>,
+    pub direction: Option<ParameterDirection>,
     pub caller_allocates: Option<String>,
     pub optional: Option<String>,
     pub skip: Option<String>,
@@ -398,7 +398,8 @@ pub struct Array {
     pub introspectable: Option<bool>,
     pub length: Option<usize>,
     pub ctype: Option<String>,
-    pub typ: Box<AnyType>,
+    pub typ: String,
+    // pub typ: Box<AnyType>,
 }
 
 #[derive(Debug)]
