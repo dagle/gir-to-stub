@@ -1,5 +1,5 @@
 // mod vimdoc;
-mod lang;
-mod parse;
-mod library;
-mod version;
+pub mod lang;
+pub mod parse;
+pub mod library;
+pub mod version;

@@ -1,1 +1,1 @@
-mod lua;
+pub mod lua;
