@@ -63,6 +63,7 @@ fn main() -> std::io::Result<()>{
                 for path in paths {
                     let osstr = path.expect("Couldn't read filename").file_name();
                     let filename = osstr.to_str().expect("Couldn't read filename");
+                    println!("Generating file {}", filename);
                     cg.gen(filename)?;
                 }
             } else {

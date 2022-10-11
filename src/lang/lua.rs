@@ -83,28 +83,24 @@ impl Namespace {
             create_section(&name, "Enums", w)?;
             for enu in self.enums.iter() {
                 enu.gen(&name, w)?;
-                // writeln!(w, "{}.{} = {}", &name, enu.name, enu.name);
             }
         }
         if !self.record.is_empty() {
             create_section(&name, "Record", w)?;
             for record in self.record.iter() {
                 record.gen(&name, w)?;
-                // writeln!(w, "{}.{} = {}", &name, record.name, record.name);
             }
         }
         if !self.constant.is_empty() {
             create_section(&name, "constant", w)?;
             for cons in self.constant.iter() {
                 cons.gen(&name, w)?;
-                // writeln!(w, "{}.{} = {}", &name, cons.name, cons.name);
             }
         }
         if !self.bitfield.is_empty() {
             create_section(&name, "bitfield", w)?;
             for bitfield in self.bitfield.iter() {
                 bitfield.gen(&name, w)?;
-                // writeln!(w, "{}.{} = {}", &name, bitfield.name, bitfield.name);
             }
         }
         w.flush()?;
@@ -267,10 +263,13 @@ fn gen_doc<W: Write>(doc: &InfoElements, w: &mut W) -> Result<()> {
 }
 
 fn gen_doc_param<W: Write>(param: &Parameter, ns: &str, w: &mut W) -> Result<()> {
+    let type_str = show_anytyp(&param.typ, ns);
     if let Some(ref doc) = param.doc.doc {
-        writeln!(w, "--- @param {} {} {}", param.name, show_anytyp(&param.typ, ns), doc.content)?;
+        let docstr = doc.content.replace("\n", "");
+        // docstr.retain(|c| c != '\n');
+        writeln!(w, "--- @param {} {} {}", param.name, type_str, docstr)?;
     } else {
-        writeln!(w, "--- @param {} {}", param.name, show_anytyp(&param.typ, ns))?;
+        writeln!(w, "--- @param {} {}", param.name, type_str)?;
     }
     Ok(())
 }
