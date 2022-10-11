@@ -1,6 +1,7 @@
-use std::str::FromStr;
+use std::{str::FromStr, path::Path, fs::{self, File}};
 
 pub mod lua;
+pub mod python;
 
 #[derive(Clone)]
 pub enum Level {
@@ -8,6 +9,8 @@ pub enum Level {
     CodeDoc,
     Full,
 }
+
+type Result<T> = std::io::Result<T>;
 
 impl std::fmt::Display for Level {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -31,6 +34,38 @@ impl FromStr for Level {
                 let ret = format!("{} level not supported", level);
                 Err(ret)
             }
+        }
+    }
+}
+
+trait Output {
+   fn output_header() -> Result<()>; 
+   fn output_section() -> Result<()>; 
+   /// How to display like a function 
+   /// declareation
+   fn output_declaration() -> Result<()>; 
+   fn output_documentatino() -> Result<()>;
+
+   // fn output_header() -> Result<()>; 
+   // fn output_header() -> Result<()>; 
+   // fn output_header() -> Result<()>; 
+}
+
+pub trait Generator {
+    fn gen(&self, filename: &str) -> Result<()>;
+}
+
+fn is_dir(dir: &str) -> bool {
+    Path::new(dir).is_dir()
+}
+
+fn open_gir(filename: &str) -> Result<File> {
+    match fs::File::open(filename) {
+        Ok(f) => Ok(f),
+        Err(_) => {
+            // If we don't find the gir locally, we use the global file
+            let path = Path::new("/usr/share/gir-1.0/").join(filename);
+            fs::File::open(path)
         }
     }
 }

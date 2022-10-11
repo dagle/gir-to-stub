@@ -513,7 +513,7 @@ fn read_class(e: &Element) -> Option<Class> {
                 }
                 "implements" => {
                     if let Some(str) = attribute(e, "name"){
-                        implements.push(str)
+                        implements.push(Implement { name: str })
                     }
                 }
                 _ => {

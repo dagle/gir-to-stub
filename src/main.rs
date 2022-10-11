@@ -50,25 +50,42 @@ struct Cli {
     filename: Option<String>,
 }
 
+fn generate<G: lang::Generator>(cg: G, filename: Option<String>) -> std::io::Result<()> {
+    if let Some(filename) = filename {
+        cg.gen(&filename)?;
+        Ok(())
+    } else {
+        let paths = fs::read_dir("/usr/share/gir-1.0/")?;
+        for path in paths {
+            let osstr = path.expect("Couldn't read filename").file_name();
+            let filename = osstr.to_str().expect("Couldn't read filename");
+            println!("Generating file {}", filename);
+            cg.gen(filename)?;
+        }
+        Ok(())
+    }
+}
+
+// a bit much copy-pasty
 fn main() -> std::io::Result<()>{
     let args = Cli::parse();
     match args.lang {
         Lang::Python => {
-            Ok(())
+            let cg = lang::python::PythonCodeGen::new(lang::Level::Code);
+            if args.gen_all {
+                generate(cg, None)
+            } else {
+                let filename = args.filename.expect("Missing filename");
+                generate(cg, Some(filename))
+            }
         },
         Lang::Lua => {
             let cg = lang::lua::LuaCodegen::new(lang::Level::Code);
             if args.gen_all {
-                let paths = fs::read_dir("/usr/share/gir-1.0/")?;
-                for path in paths {
-                    let osstr = path.expect("Couldn't read filename").file_name();
-                    let filename = osstr.to_str().expect("Couldn't read filename");
-                    println!("Generating file {}", filename);
-                    cg.gen(filename)?;
-                }
+                generate(cg, None)?;
             } else {
                 let filename = args.filename.expect("Missing filename");
-                cg.gen(&filename)?;
+                generate(cg, Some(filename))?;
             }
             Ok(())
         },

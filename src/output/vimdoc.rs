@@ -1,7 +1,17 @@
 use chrono::{DateTime, Utc};
 use std::io::prelude::*;
 
+// do not do like this
+// this is just for now 
+// in the future we should be be able
+// generate the stub and vimdoc from 
+// the same document
+
 type Result<T> = std::io::Result<T>;
+
+pub struct VimDoc {
+    // level: Level
+}
 
 pub fn write_enum<W: Write>(e: &Comp, w: &mut W) -> Result<()> {
     writeln!(w, "{}", e.name)
@@ -14,49 +24,90 @@ fn create_section<W: Write>(ns: &str, name: &str, w: &mut W) -> Result<()> {
     Ok(())
 }
 
+#[macro_export]
+macro_rules! section {
+    ( $( $w:ident, $name:ident, $section:ident ),* ) => {
+        {
+            if !self.$x.is_empty() {
+                create_section(&$name, "$x", $w)?;
+                for section in self.$x.iter() {
+                    section.gen($name, $w)?;
+                }
+            }
+        };
+    }
+}
+
+impl VimDoc {
+    pub fn new(/* level: Level */) {
+        VimDoc{}
+    }
+    fn gen(&self, filename: &str) {
+        let now: DateTime<Utc> = Utc::now();
+        let datestr = format!("Last Generated: {}", now.format("%d/%m/%Y %H:%M"));
+        writeln!(w, "*{}.txt* {:>pad$}", self.ns, datestr, pad=76-5-self.ns.len())?;
+
+        section!(w, name, classes);
+        if !self.classes.is_empty() {
+            create_section(&name, "classes", w)?;
+            for class in self.classes.iter() {
+                writeln!(w, "{}.{} = {{}}", &name, class.name)?;
+                class.gen(&name, w)?;
+            }
+        }
+        if !self.functions.is_empty() {
+            create_section(&name, "Function", w)?;
+            for function in self.functions.iter() {
+                function.gen(&name, &name, w)?;
+            }
+        }
+        if !self.enums.is_empty() {
+            create_section(&name, "Enums", w)?;
+            for enu in self.enums.iter() {
+                enu.gen(&name, w)?;
+            }
+        }
+        if !self.record.is_empty() {
+            create_section(&name, "Record", w)?;
+            for record in self.record.iter() {
+                record.gen(&name, w)?;
+            }
+        }
+        if !self.constant.is_empty() {
+            create_section(&name, "Constant", w)?;
+            for cons in self.constant.iter() {
+                cons.gen(&name, w)?;
+            }
+        }
+        if !self.bitfield.is_empty() {
+            create_section(&name, "Bitfield", w)?;
+            for bitfield in self.bitfield.iter() {
+                bitfield.gen(&name, w)?;
+            }
+        }
+        if !self.alias.is_empty() {
+            create_section(&name, "Alias", w)?;
+            for alias in self.bitfield.iter() {
+                alias.gen(&name, w)?;
+            }
+        }
+        if !self.unions.is_empty() {
+            create_section(&name, "Union", w)?;
+            for unions in self.bitfield.iter() {
+                unions.gen(&name, w)?;
+            }
+        }
+
+        writeln!(w, "")?;
+        write!(w, "vim:tw=78:ts=8:noet:ft=help:norl:")?;
+        w.flush()?;
+        Ok(())
+    }
+}
+
+
 // namespace
 pub fn write<W: Write>(&self, w: &mut W) -> Result<()> {
-    let now: DateTime<Utc> = Utc::now();
-    let datestr = format!("Last Generated: {}", now.format("%d/%m/%Y %H:%M"));
-    writeln!(w, "*{}.txt* {:>pad$}", self.ns, datestr, pad=76-5-self.ns.len())?;
-
-    for classes in self.global.classes.iter() {
-        classes.write(&self.ns, w)?;
-    }
-
-    if ! self.global.functions.is_empty() {
-        writeln!(w, "")?;
-
-        create_section(&self.ns, "Functions", w)?;
-        writeln!(w, "")?;
-        for function in self.global.functions.iter() {
-            function.write(&self.ns, w)?;
-        }
-    }
-
-    if ! self.global.macros.is_empty() {
-        writeln!(w, "")?;
-
-        create_section(&self.ns, "Macros", w)?;
-        writeln!(w, "")?;
-        for macr in self.global.macros.iter() {
-            macr.write(&self.ns, w)?;
-        }
-    }
-
-    if ! self.global.functions.is_empty() {
-        writeln!(w, "")?;
-
-        create_section(&self.ns, "Enums", w)?;
-        writeln!(w, "")?;
-        for enu in self.global.enums.iter() {
-            write_enum(enu, w)?;
-        }
-    }
-    writeln!(w, "")?;
-    write!(w, "vim:tw=78:ts=8:noet:ft=help:norl:")?;
-    w.flush()?;
-    Ok(())
 }
 
 // class

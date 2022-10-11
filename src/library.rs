@@ -61,6 +61,7 @@ pub struct Namespace {
 #[derive(Debug)]
 pub struct InfoAttrs {
     pub introspectable: Option<bool>,
+    // should be a bool
     pub deprecated: Option<String>,
     pub deprecated_version: Option<String>,
     pub version: Option<String>,
@@ -138,7 +139,7 @@ pub struct Class {
     pub unions: Vec<Union>,
     pub constant: Vec<Constant>,
     pub properties: Vec<Property>,
-    pub implements: Vec<String>,
+    pub implements: Vec<Implement>,
 
     pub doc: InfoElements,
 
@@ -310,6 +311,11 @@ pub struct Boxed {
     pub glib_get_type: Option<String>,
 
     pub functions: Vec<Function>,
+}
+
+#[derive(Debug)]
+pub struct Implement {
+    pub name: String
 }
 
 #[derive(Debug)]
