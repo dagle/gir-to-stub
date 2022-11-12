@@ -22,6 +22,8 @@ impl LuaCodegen {
         }
     }
 }
+
+// TODO have a target
 impl Generator for LuaCodegen {
     fn gen(&self, filename: &str) -> Result<()> {
         let types = "types";
@@ -40,7 +42,7 @@ impl Generator for LuaCodegen {
 }
 
 fn create_section<W: Write>(ns: &str, str: &str, w: &mut W) -> Result<()> {
-    writeln!(w, "-- {} {}", ns, str)
+    writeln!(w, "--- {} {}\n", ns, str)
 }
 
 // #[macro_export]
@@ -137,7 +139,7 @@ impl Class {
 
 impl Implement {
     pub fn gen<W: Write>(&self, _ns: &str, w: &mut W) -> Result<()> {
-        writeln!(w, "-- implements: {}", self.name)?;
+        writeln!(w, "--- implements: {}", self.name)?;
         Ok(())
     }
 }
@@ -150,13 +152,13 @@ impl Union {
 }
 impl Property {
     pub fn gen<W: Write>(&self, ns: &str, w: &mut W) -> Result<()> {
-        writeln!(w, "-- {}.{} = prop", &ns, self.name)?;
+        writeln!(w, "--- {}.{} = prop", &ns, self.name)?;
         Ok(())
     }
 }
 impl Signal {
     pub fn gen<W: Write>(&self, ns: &str, w: &mut W) -> Result<()> {
-        writeln!(w, "-- {}.{} = signal", &ns, self.name)?;
+        writeln!(w, "--- {}.{} = signal", &ns, self.name)?;
         Ok(())
     }
 }
@@ -223,7 +225,7 @@ impl Field {
         let typ = show_anytyp(&self.typ, ns);
         // TODO can we progate the types?
         // writeln!(w, "-- {}.{} = {{}}", &ns, self.name, typ)?;
-        writeln!(w, "-- {}.{} = {{}}", &ns, self.name)?;
+        writeln!(w, "--- {}.{} = {{}}", &ns, self.name)?;
         Ok(())
     }
 }
@@ -248,7 +250,7 @@ fn gen_doc<W: Write>(doc: &InfoElements, w: &mut W) -> Result<()> {
     if let Some(ref docs) = doc.doc {
         let lines = docs.content.split("\n");
         for line in lines {
-            writeln!(w, "-- {}", line)?;
+            writeln!(w, "--- {}", line)?;
         }
     }
     // if let Some(ref stability) = doc.doc_stability {
@@ -273,6 +275,7 @@ fn gen_doc_param<W: Write>(param: &Parameter, ns: &str, w: &mut W) -> Result<()>
     }
     Ok(())
 }
+
 fn gen_doc_params<W: Write>(params: &Vec<Parameter>, ns: &str, w: &mut W) -> Result<()> {
     for param in params.iter() {
         gen_doc_param(&param, ns, w)?;
@@ -330,7 +333,7 @@ impl Function {
             gen_doc_params(&self.parameters, root_ns, w)?;
             gen_doc_return(&self, root_ns, w)?;
             let param_names = gen_param_names(&self.parameters, false);
-            writeln!(w, "function {}.{}({}) end", &ns, self.name, param_names)?;
+            writeln!(w, "function {}.{}({}) end\n", &ns, self.name, param_names)?;
         }
         Ok(())
     }
@@ -342,7 +345,7 @@ impl Function {
             gen_doc_params(&self.parameters, root_ns, w)?;
             gen_doc_return(&self, root_ns, w)?;
             let param_names = gen_param_names(&self.parameters, true);
-            writeln!(w, "function {}.{}({}) end", &ns, self.name, param_names)?;
+            writeln!(w, "function {}.{}({}) end\n", &ns, self.name, param_names)?;
         }
         Ok(())
     }
@@ -353,7 +356,7 @@ impl Function {
             gen_doc_params(&self.parameters, root_ns, w)?;
             gen_doc_return(&self, root_ns, w)?;
             let param_names = gen_param_names(&self.parameters, true);
-            writeln!(w, "\t[\"{}\"] = function({}) end,", self.name.to_uppercase(), param_names)?;
+            writeln!(w, "\t[\"{}\"] = function({}) end,\n", self.name.to_uppercase(), param_names)?;
         }
         Ok(())
     }

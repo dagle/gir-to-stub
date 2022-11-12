@@ -36,7 +36,8 @@ struct Cli {
     #[clap(short, long, value_name = "lua|python")]
     lang: Lang,
 
-    #[clap(long, value_name = "Code|CodeDoc|Full")]
+    // #[clap(long, value_name = "Code|CodeDoc|Full")]
+    #[clap(long, value_name = "Code")]
     #[clap(default_value_t = lang::Level::Code)]
     level: lang::Level,
 

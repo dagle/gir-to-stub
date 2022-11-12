@@ -31,17 +31,24 @@ impl PythonCodeGen {
 
 impl Generator for PythonCodeGen {
     fn gen(&self, filename: &str) -> Result<()> {
-        // let types = "gi-stubs";
-        // if !super::is_dir(types) {
-        //     fs::create_dir(types)?;
-        // }
-        // let mut path = Path::new(types).join(filename);
-        // path.set_extension("lua");
-        // let mut out_file = fs::File::create(path)?;
-        // let in_file = super::open_gir(filename)?;
-        // let repo = parse::parse_gir(in_file).expect("Couldn't parse gir file");
-        // repo.namespace[0].gen(&mut out_file)?;
+        let types = "gi-stubs";
+        if !super::is_dir(types) {
+            fs::create_dir(types)?;
+        }
+        let mut path = Path::new(types).join(filename);
+        path.set_extension("py");
+        let mut out_file = fs::File::create(path)?;
+        let in_file = open_gir(filename)?;
+        let repo = parse::parse_gir(in_file).expect("Couldn't parse gir file");
+        repo.namespace[0].gen(&mut out_file)?;
 
         Ok(())
     }
+}
+
+// TODO Typehinting
+// TODO docstrings inside a class
+
+fn create_section<W: Write>(ns: &str, str: &str, w: &mut W) -> Result<()> {
+    writeln!(w, "# {} {}\n", ns, str)
 }
