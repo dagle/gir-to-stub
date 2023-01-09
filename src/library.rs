@@ -62,7 +62,7 @@ pub struct Namespace {
 pub struct InfoAttrs {
     pub introspectable: Option<bool>,
     // should be a bool
-    pub deprecated: Option<String>,
+    pub deprecated: Option<bool>,
     pub deprecated_version: Option<String>,
     pub version: Option<String>,
     pub stability: Option<String>,
@@ -79,8 +79,8 @@ pub struct InfoElements {
 
 #[derive(Debug)]
 pub struct Doc {
-    pub preserve_space: Option<String>,
-    pub preserve_white: Option<String>,
+    pub preserve_space: Option<String>, // bools? default false?
+    pub preserve_white: Option<String>, // bools? default false?
     pub filename: String,
     pub line: String,
     pub column: Option<String>,
@@ -89,8 +89,8 @@ pub struct Doc {
 
 #[derive(Debug)]
 pub struct DocVersioned {
-    pub preserve_space: Option<String>,
-    pub preserve_white: Option<String>,
+    pub preserve_space: Option<String>, // bools? default false?
+    pub preserve_white: Option<String>, // bools? default false?
     pub content: String,
 }
 
@@ -255,6 +255,7 @@ pub struct Function {
     // TODO add kind
     
     pub name: String,
+    pub introspectable: Option<bool>,
     pub c_identifier: Option<String>,
     pub shadowed_by: Option<String>,
     pub shadows: Option<String>,
@@ -331,7 +332,7 @@ pub struct Alias {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ParameterDirection {
     None,
-    In,
+    In, // default
     Out,
     InOut,
     Return,
@@ -373,24 +374,28 @@ pub struct MacroParam {
 #[derive(Debug)]
 pub struct Parameter {
     pub name: String,
-    pub nullable: Option<String>,
-    pub allow_none: Option<String>,
-    pub introspectable: Option<String>,
-    pub closure: Option<String>,
-    pub destroy: Option<String>,
-    pub scope: Option<String>,
+    pub nullable: bool, // default false
+    pub allow_none: bool, // default false
+    pub introspectable: Option<bool>,
+    pub closure: Option<String>, // u32
+    pub destroy: Option<String>, // u32
+    pub scope: Option<String>, // ParameterScope
     pub direction: Option<ParameterDirection>,
-    pub caller_allocates: Option<String>,
-    pub optional: Option<String>,
-    pub skip: Option<String>,
+    pub caller_allocates: bool, // default false
+    pub optional: bool, // default false
+    pub skip: bool, // default false
     pub transfer: Option<Transfer>,
     pub doc: InfoElements,
     pub typ: AnyType,
 }
 
+// In most cases we don't care about what kind the type is, hence we don't care
+// if it's a record, a class enum, etc. Because we are not generating real code but 
+// only doing anotations and anytype is used for type referencing so specifics are not important. 
+// Calling a class method or a function might have different syntax but we don't do the semantics, 
+// that is why we can get away with this simplified version of anytype. 
 #[derive(Debug)]
 pub enum AnyType {
-    // Callback(Function),
     Array(Array),
     Type(Type),
     VarArg,
@@ -425,9 +430,9 @@ pub struct Field {
     pub doc: InfoElements,
 
     pub typ: AnyType,
-    pub writeable: Option<bool>,
-    pub readable: Option<bool>,
-    pub private: Option<bool>,
+    pub writeable: bool, // default is false
+    pub readable: bool, // default is true
+    pub private: bool, // default is false
     pub bits: Option<u32>,
 }
 
@@ -437,10 +442,10 @@ pub struct Property {
     pub info: InfoAttrs,
     pub doc: InfoElements,
 
-    pub readable: Option<bool>,
-    pub writable: Option<bool>,
-    pub construct: Option<bool>,
-    pub construct_only: Option<bool>,
+    pub writable: bool, // default is false
+    pub readable: bool, // default is true
+    pub construct: bool, // default is false
+    pub construct_only: bool, // default is false
     pub setter: Option<String>,
     pub getter: Option<String>,
     pub transfer: Option<Transfer>,

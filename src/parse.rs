@@ -73,6 +73,69 @@ fn get_attribute(e: &Element, attr: &str) -> Option<String> {
     e.attributes.get(attr).map(|x| x.to_string())
 }
 
+fn r_anytype(e: &Element) -> Option<AnyType> {
+    match e.name.as_str() {
+        "type" => { 
+            let name = attribute(e, "name");
+            let ctype = attribute(e, "type");
+            let introspectable = attr_bool(e, "introspectable");
+            let doc = read_infoelements(e)?;
+            let mut children = vec![];
+            for node in e.children.iter() {
+                if let Some(e) = node.as_element() {
+                    if let Some(typ) = read_anytype(e) {
+                        children.push(typ)
+                    }
+                }
+            }
+            if Some("GLib.HashTable") == name.as_deref() {
+                for node in e.children.iter() {
+                    if let Some(e) = node.as_element() {
+                        println!("{:?}", e);
+                        if let Some(typ) = read_anytype(e) {
+                            children.push(typ)
+                        }
+                    }
+                }
+            }
+            return Some(AnyType::Type(Type{
+                name,
+                ctype,
+                introspectable,
+                doc,
+                children,
+            }))
+        }
+        "array" => {
+            let name = attribute(e, "name");
+            let zero_terminated = attr_bool(e, "zero-terminated");
+            let fixed_size = attr_bool(e, "fixed-size");
+            let introspectable = attr_bool(e, "introspectable");
+            let length = attr_value(e, "length");
+            let ctype = attribute(e, "type");
+            for node in e.children.iter() {
+                if let Some(e) = node.as_element() {
+                    let typ = attribute(e, "name")?;
+                    return Some(AnyType::Array(Array{
+                        name,
+                        zero_terminated,
+                        fixed_size,
+                        introspectable,
+                        length,
+                        ctype,
+                        typ,
+                    }))
+                }
+            }
+            None
+        }
+        "varargs" => {
+            return Some(AnyType::VarArg)
+        }
+        _ => None
+    }
+}
+
 fn read_anytype(e: &Element) -> Option<AnyType> {
     for node in e.children.iter() {
         if let Some(e) = node.as_element() {
@@ -85,7 +148,7 @@ fn read_anytype(e: &Element) -> Option<AnyType> {
                     let mut children = vec![];
                     for node in e.children.iter() {
                         if let Some(e) = node.as_element() {
-                            if let Some(typ) = read_anytype(e) {
+                            if let Some(typ) = r_anytype(e) {
                                 children.push(typ)
                             }
                         }
@@ -133,17 +196,17 @@ fn read_anytype(e: &Element) -> Option<AnyType> {
 }
 
 fn read_param(e: &Element) -> Option<Parameter> {
-    let name = attribute(e, "name")?;
-    let nullable = attribute(e, "nullable");
-    let allow_none = attribute(e, "allow-none");
-    let introspectable = attribute(e, "introspectable");
+    let name = attribute(e, "name").unwrap_or("".to_string());
+    let nullable = attr_bool(e, "nullable").unwrap_or(false);
+    let allow_none = attr_bool(e, "allow-none").unwrap_or(false);
+    let introspectable = attr_bool(e, "introspectable");
     let closure = attribute(e, "closure");
     let destroy = attribute(e, "destroy");
     let scope = attribute(e, "scope");
     let direction = attr_value(e, "direction");
-    let caller_allocates = attribute(e, "caller-allocates");
-    let optional = attribute(e, "optional");
-    let skip = attribute(e, "skip");
+    let caller_allocates = attr_bool(e, "caller-allocates").unwrap_or(false);
+    let optional = attr_bool(e, "optional").unwrap_or(false);
+    let skip = attr_bool(e, "skip").unwrap_or(false);
     let transfer = attr_value(e, "transfer");
     let doc = read_infoelements(e)?;
     let typ = read_anytype(e)?;
@@ -172,11 +235,14 @@ fn read_params(e: &Element) -> Option<Vec<Parameter>> {
 
     for parameter in parameters.children.iter() {
         if let Some(e) = parameter.as_element() {
-            if e.name == "parameter" {
-                let para = read_param(e);
-                if let Some(para) = para {
-                    ret.push(para);
-                }
+            match e.name.as_ref() {
+                "parameter" | "instance-parameter" => {
+                    let para = read_param(e);
+                    if let Some(para) = para {
+                        ret.push(para);
+                    }
+                },
+                _ => return None,
             }
         }
     }
@@ -262,6 +328,7 @@ fn read_function(e: &Element) -> Option<Function> {
     let shadows = attribute(e, "shadows");
     let throws = attr_bool(e, "throws");
     let moved_to = attribute(e, "moved-to");
+    let introspectable = attr_bool(e, "introspectable");
 
     let ret = read_return(e);
     let parameters = read_params(e).unwrap_or(vec![]);
@@ -270,6 +337,7 @@ fn read_function(e: &Element) -> Option<Function> {
         info,
         doc,
         name,
+        introspectable,
         c_identifier,
         shadowed_by,
         shadows,
@@ -324,10 +392,10 @@ fn read_property(e: &Element) -> Option<Property> {
     let info = read_infoattrs(e)?;
     let doc = read_infoelements(e)?;
 
-    let readable = attr_bool(e, "readable");
-    let writable = attr_bool(e, "writable");
-    let construct = attr_bool(e, "construct");
-    let construct_only = attr_bool(e, "construct-only");
+    let readable = attr_bool(e, "readable").unwrap_or(true);
+    let writable = attr_bool(e, "writable").unwrap_or(false);
+    let construct = attr_bool(e, "construct").unwrap_or(false);
+    let construct_only = attr_bool(e, "construct-only").unwrap_or(false);
     let setter = attribute(e, "setter");
     let getter = attribute(e, "getter");
     let transfer = attr_value(e, "transfer");
@@ -363,7 +431,7 @@ pub fn attr_bool(e: &Element, name: &str) -> Option<bool>
 
 fn read_infoattrs(e: &Element) -> Option<InfoAttrs> {
     let introspectable = attr_bool(e, "introspectable");
-    let deprecated = attribute(e, "deprecated");
+    let deprecated = attr_bool(e, "deprecated");
     let deprecated_version = attribute(e, "deprecated-version");
     let version = attribute(e, "version");
     let stability = attribute(e, "stability");
@@ -559,9 +627,9 @@ fn read_field(e: &Element) -> Option<Field> {
     let doc = read_infoelements(e)?;
     
     let typ = read_anytype(e)?;
-    let writeable = attr_bool(e, "writeable");
-    let readable = attr_bool(e, "readable");
-    let private = attr_bool(e, "private");
+    let writeable = attr_bool(e, "writeable").unwrap_or(false);
+    let readable = attr_bool(e, "readable").unwrap_or(true);
+    let private = attr_bool(e, "private").unwrap_or(false);
     let bits = attr_value(e, "bits");
 
     Some(Field {
@@ -649,7 +717,6 @@ fn read_record(e: &Element) -> Option<Record> {
 }
 
 fn read_constant(e: &Element) -> Option<Constant> {
-    let name = attribute(e, "name")?;
     let info = read_infoattrs(e)?;
     let doc = read_infoelements(e)?;
 
@@ -735,27 +802,6 @@ fn read_union(e: &Element) -> Option<Union> {
     })
 }
 
-// fn read_bitfield(e: &Element) -> Option<Comp> {
-//     let name = e.attributes.get("name")?;
-//     let mut fields = vec![];
-//     let doc = read_inner_doc(e).unwrap_or("".to_string());
-//     for node in e.children.iter() {
-//         if let Some(e) = node.as_element() {
-//             if e.name == "member" {
-//                 if let Some(id) = e.attributes.get("name") {
-//                     let inner_doc = read_inner_doc(e).unwrap_or("".to_string());
-//                     fields.push((id.to_owned(), inner_doc))
-//                 }
-//             }
-//         }
-//     }
-//     Some(Comp {
-//         name: name.to_string(),
-//         doc,
-//         members: fields,
-//     })
-// }
-
 fn read_namespace(e: &Element) -> Option<Namespace> {
     let name = attribute(e, "name");
     let version = attribute(e, "version");
@@ -822,6 +868,11 @@ fn read_namespace(e: &Element) -> Option<Namespace> {
                 "bitfield" => {
                     if let Some(bf) = read_bitfield(e) {
                         bitfield.push(bf)
+                    }
+                }
+                "union" => {
+                    if let Some(union) = read_union(e) {
+                        unions.push(union)
                     }
                 }
                 "docsection" => {
@@ -1021,6 +1072,19 @@ fn read_boxed(e: &Element) -> Option<Boxed> {
     let symbol_prefix = attribute(e, "symbol-prefix");
     let glib_type_name = attribute(e, "type-name");
     let glib_get_type = attribute(e, "get-type");
+    let mut functions = vec![];
+    for node in e.children.iter() {
+        if let Some(e) = node.as_element() {
+            match e.name.as_str() {
+                "function" => {
+                    if let Some(fun) = read_function(e) {
+                        functions.push(fun);
+                    }
+                },
+                _ => panic!("Only functions allowed as boxed children")
+            }
+        }
+    }
 
     Some(Boxed {
         glib_name,
@@ -1029,7 +1093,7 @@ fn read_boxed(e: &Element) -> Option<Boxed> {
         symbol_prefix,
         glib_type_name,
         glib_get_type,
-        functions: todo!(),
+        functions,
     })
 }
 

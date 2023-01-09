@@ -38,18 +38,18 @@ impl FromStr for Level {
     }
 }
 
-trait Output {
-   fn output_header() -> Result<()>; 
-   fn output_section() -> Result<()>; 
-   /// How to display like a function 
-   /// declareation
-   fn output_declaration() -> Result<()>; 
-   fn output_documentatino() -> Result<()>;
-
-   // fn output_header() -> Result<()>; 
-   // fn output_header() -> Result<()>; 
-   // fn output_header() -> Result<()>; 
-}
+// trait Output {
+//    fn output_header() -> Result<()>; 
+//    fn output_section() -> Result<()>; 
+//    /// How to display like a function 
+//    /// declareation
+//    fn output_declaration() -> Result<()>; 
+//    fn output_documentatino() -> Result<()>;
+//
+//    // fn output_header() -> Result<()>; 
+//    // fn output_header() -> Result<()>; 
+//    // fn output_header() -> Result<()>; 
+// }
 
 pub trait Generator {
     fn gen(&self, filename: &str) -> Result<()>;
