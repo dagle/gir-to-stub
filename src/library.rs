@@ -104,6 +104,7 @@ pub struct DocPosition {
 #[derive(Debug)]
 pub struct Class {
     pub info: InfoAttrs,
+    pub doc: InfoElements,
 
     pub name: String,
 
@@ -140,9 +141,6 @@ pub struct Class {
     pub constant: Vec<Constant>,
     pub properties: Vec<Property>,
     pub implements: Vec<Implement>,
-
-    pub doc: InfoElements,
-
 }
 
 #[derive(Debug)]
@@ -206,7 +204,6 @@ pub struct Constant {
     pub typ: Option<AnyType>,
 }
 
-
 #[derive(Debug)]
 pub struct Bitfield {
     pub info: InfoAttrs,
@@ -249,9 +246,20 @@ pub struct Macro {
 }
 
 #[derive(Debug)]
+pub enum FunctionType {
+    Function,
+    Callback,
+    Constructor,
+    Method,
+    Virtual,
+    Member,
+}
+
+#[derive(Debug)]
 pub struct Function {
     pub info: InfoAttrs,
     pub doc: InfoElements,
+    pub typ: FunctionType,
     // TODO add kind
     
     pub name: String,

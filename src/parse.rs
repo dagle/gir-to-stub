@@ -318,7 +318,7 @@ fn read_signal(e: &Element) -> Option<Signal> {
     })
 }
 
-fn read_function(e: &Element) -> Option<Function> {
+fn read_function(e: &Element, typ: FunctionType) -> Option<Function> {
     let name = attribute(e, "name")?;
     let info = read_infoattrs(e)?;
     let doc = read_infoelements(e)?;
@@ -336,6 +336,7 @@ fn read_function(e: &Element) -> Option<Function> {
     Some(Function {
         info,
         doc,
+        typ,
         name,
         introspectable,
         c_identifier,
@@ -525,27 +526,27 @@ fn read_class(e: &Element) -> Option<Class> {
         if let Some(e) = node.as_element() {
             match e.name.as_str() {
                 "constructor" => {
-                    if let Some(fun) = read_function(e) {
+                    if let Some(fun) = read_function(e, FunctionType::Constructor) {
                         constructor.push(fun)
                     }
                 }
                 "function" => {
-                    if let Some(fun) = read_function(e) {
+                    if let Some(fun) = read_function(e, FunctionType::Function) {
                         functions.push(fun)
                     }
                 }
                 "method" => {
-                    if let Some(fun) = read_function(e) {
+                    if let Some(fun) = read_function(e, FunctionType::Method) {
                         method.push(fun)
                     }
                 }
                 "virtual-method" => { 
-                    if let Some(fun) = read_function(e) {
+                    if let Some(fun) = read_function(e, FunctionType::Virtual) {
                         virtual_method.push(fun)
                     }
                 }
                 "callback" => { 
-                    if let Some(fun) = read_function(e) {
+                    if let Some(fun) = read_function(e, FunctionType::Callback) {
                         callbacks.push(fun)
                     }
                 }
@@ -668,17 +669,17 @@ fn read_record(e: &Element) -> Option<Record> {
         if let Some(e) = node.as_element() {
             match e.name.as_str() {
                 "constructor" => {
-                    if let Some(fun) = read_function(e) {
+                    if let Some(fun) = read_function(e, FunctionType::Constructor) {
                         constructor.push(fun)
                     }
                 }
                 "function" => {
-                    if let Some(fun) = read_function(e) {
+                    if let Some(fun) = read_function(e, FunctionType::Function) {
                         functions.push(fun)
                     }
                 }
                 "method" => {
-                    if let Some(fun) = read_function(e) {
+                    if let Some(fun) = read_function(e, FunctionType::Method) {
                         method.push(fun)
                     }
                 }
@@ -756,17 +757,17 @@ fn read_union(e: &Element) -> Option<Union> {
         if let Some(e) = node.as_element() {
             match e.name.as_str() {
                 "constructor" => {
-                    if let Some(fun) = read_function(e) {
+                    if let Some(fun) = read_function(e, FunctionType::Constructor) {
                         constructor.push(fun)
                     }
                 }
                 "function" => {
-                    if let Some(fun) = read_function(e) {
+                    if let Some(fun) = read_function(e, FunctionType::Function) {
                         functions.push(fun)
                     }
                 }
                 "method" => {
-                    if let Some(fun) = read_function(e) {
+                    if let Some(fun) = read_function(e, FunctionType::Method) {
                         method.push(fun)
                     }
                 }
@@ -836,7 +837,7 @@ fn read_namespace(e: &Element) -> Option<Namespace> {
                     }
                 }
                 "function" => {
-                    if let Some(fun) = read_function(e) {
+                    if let Some(fun) = read_function(e, FunctionType::Function) {
                         functions.push(fun);
                     }
                 }
@@ -846,7 +847,7 @@ fn read_namespace(e: &Element) -> Option<Namespace> {
                     }
                 }
                 "callback" => {
-                    if let Some(cb) = read_function(e) {
+                    if let Some(cb) = read_function(e, FunctionType::Callback) {
                         callback.push(cb);
                     }
                 }
@@ -930,11 +931,12 @@ fn read_alias(e: &Element) -> Option<Alias> {
 
     let mut functions = vec![];
 
+    // XXX: Should we even do this?
     for node in e.children.iter() {
         if let Some(e) = node.as_element() {
             match e.name.as_str() {
                 "constructor" => {
-                    if let Some(fun) = read_function(e) {
+                    if let Some(fun) = read_function(e, FunctionType::Constructor) {
                         functions.push(fun) 
                     }
                 }
@@ -982,27 +984,27 @@ fn read_interface(e: &Element) -> Option<Interface> {
         if let Some(e) = node.as_element() {
             match e.name.as_str() {
                 "constructor" => {
-                    if let Some(fun) = read_function(e) {
+                    if let Some(fun) = read_function(e, FunctionType::Constructor) {
                         constructor = Some(fun)
                     }
                 }
                 "function" => {
-                    if let Some(fun) = read_function(e) {
+                    if let Some(fun) = read_function(e, FunctionType::Function) {
                         functions.push(fun)
                     }
                 }
                 "method" => {
-                    if let Some(fun) = read_function(e) {
+                    if let Some(fun) = read_function(e, FunctionType::Method) {
                         method.push(fun)
                     }
                 }
                 "virtual-method" => { 
-                    if let Some(fun) = read_function(e) {
+                    if let Some(fun) = read_function(e, FunctionType::Virtual) {
                         virtual_method.push(fun)
                     }
                 }
                 "callback" => { 
-                    if let Some(fun) = read_function(e) {
+                    if let Some(fun) = read_function(e, FunctionType::Callback) {
                         callbacks.push(fun)
                     }
                 }
@@ -1077,7 +1079,7 @@ fn read_boxed(e: &Element) -> Option<Boxed> {
         if let Some(e) = node.as_element() {
             match e.name.as_str() {
                 "function" => {
-                    if let Some(fun) = read_function(e) {
+                    if let Some(fun) = read_function(e, FunctionType::Function) {
                         functions.push(fun);
                     }
                 },
@@ -1113,7 +1115,7 @@ fn read_bitfield(e: &Element) -> Option<Bitfield> {
         if let Some(e) = node.as_element() {
             match e.name.as_str() {
                 "function" => {
-                    if let Some(fun) = read_function(e) {
+                    if let Some(fun) = read_function(e, FunctionType::Member) {
                         functions.push(fun);
                     }
                 }
@@ -1178,7 +1180,7 @@ fn read_enum(e: &Element) -> Option<Enumeration> {
                     }
                 }
                 "function" => {
-                    if let Some(fun) = read_function(e) {
+                    if let Some(fun) = read_function(e, FunctionType::Member) {
                         functions.push(fun);
                     }
                 }

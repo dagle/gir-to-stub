@@ -1,4 +1,5 @@
-use std::{str::FromStr, path::Path, fs::{self, File}};
+use std::{str::FromStr, path::Path, fs::{self, File}, io::BufReader};
+use anyhow::Result;
 
 pub mod lua;
 pub mod python;
@@ -9,8 +10,6 @@ pub enum Level {
     CodeDoc,
     Full,
 }
-
-type Result<T> = std::io::Result<T>;
 
 impl std::fmt::Display for Level {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -38,34 +37,39 @@ impl FromStr for Level {
     }
 }
 
-// trait Output {
-//    fn output_header() -> Result<()>; 
-//    fn output_section() -> Result<()>; 
-//    /// How to display like a function 
-//    /// declareation
-//    fn output_declaration() -> Result<()>; 
-//    fn output_documentatino() -> Result<()>;
-//
-//    // fn output_header() -> Result<()>; 
-//    // fn output_header() -> Result<()>; 
-//    // fn output_header() -> Result<()>; 
-// }
-
 pub trait Generator {
     fn gen(&self, filename: &str) -> Result<()>;
+    fn generate(&self, filename: Option<&str>) -> Result<()> {
+        if let Some(filename) = filename {
+            self.gen(&filename)
+        } else {
+            let paths = fs::read_dir("/usr/share/gir-1.0/")?;
+            for path in paths {
+                let osstr = path.expect("Couldn't read filename").file_name();
+                let filename = osstr.to_str().expect("Couldn't read filename");
+                println!("Generating file {}", filename);
+                self.gen(filename)?;
+            }
+            Ok(())
+        }
+    }
+}
+
+pub trait Gen {
 }
 
 fn is_dir(dir: &str) -> bool {
     Path::new(dir).is_dir()
 }
 
-fn open_gir(filename: &str) -> Result<File> {
-    match fs::File::open(filename) {
-        Ok(f) => Ok(f),
+/// Try to open the file at path, if it fails,
+/// it will try to search for the path in gir directory
+fn open_gir<P: AsRef<Path>>(filename: P) -> Result<BufReader<File>> {
+    match fs::File::open(&filename) {
+        Ok(f) => Ok(BufReader::new(f)),
         Err(_) => {
-            // If we don't find the gir locally, we use the global file
             let path = Path::new("/usr/share/gir-1.0/").join(filename);
-            fs::File::open(path)
+            Ok(BufReader::new(fs::File::open(path)?))
         }
     }
 }
