@@ -38,17 +38,17 @@ impl FromStr for Level {
 }
 
 pub trait Generator {
-    fn gen(&self, filename: &str) -> Result<()>;
+    fn genfile(&self, filename: &str) -> Result<()>;
     fn generate(&self, filename: Option<&str>) -> Result<()> {
         if let Some(filename) = filename {
-            self.gen(&filename)
+            self.genfile(&filename)
         } else {
             let paths = fs::read_dir("/usr/share/gir-1.0/")?;
             for path in paths {
                 let osstr = path.expect("Couldn't read filename").file_name();
                 let filename = osstr.to_str().expect("Couldn't read filename");
                 println!("Generating file {}", filename);
-                self.gen(filename)?;
+                self.genfile(filename)?;
             }
             Ok(())
         }

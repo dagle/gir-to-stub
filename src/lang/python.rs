@@ -26,7 +26,7 @@ impl PythonCodeGen {
 }
 
 impl Generator for PythonCodeGen {
-    fn gen(&self, filename: &str) -> Result<()> {
+    fn genfile(&self, filename: &str) -> Result<()> {
         let types = "gi-stubs";
         if !super::is_dir(types) {
             fs::create_dir(types)?;

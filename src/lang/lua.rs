@@ -1,5 +1,5 @@
 use std::{ffi::OsStr, io::BufWriter};
-use std::io::Write;
+use std::io::{Write, Read};
 use std::fs;
 use crate::{library::*, parse};
 use std::path::Path;
@@ -21,8 +21,16 @@ impl LuaCodegen {
     }
 }
 
+impl LuaCodegen {
+    fn gen<R: Read, W: Write>(&self, r: R,  w: &mut W) -> Result<()> {
+        let repo = parse::parse_gir(r).expect("Couldn't parse gir file");
+        repo.namespace[0].gen(w)?;
+        Ok(())
+    }
+}
+
 impl Generator for LuaCodegen {
-    fn gen(&self, filename: &str) -> Result<()> {
+    fn genfile(&self, filename: &str) -> Result<()> {
         let path = Path::new(filename);
         if path.extension() != Some(OsStr::new("gir")) {
             return Err(anyhow::anyhow!(format!("{} Filetype isn't gir", path.to_string_lossy())))
@@ -32,16 +40,14 @@ impl Generator for LuaCodegen {
             fs::create_dir(types)?;
         }
 
-        if let Some(file) = path.file_name() {
-            generate_gobject(types)?;
-            let mut path = Path::new(types).join(file);
-            path.set_extension("lua");
-            let mut out_file = BufWriter::new(fs::File::create(path)?);
-            let in_file = open_gir(filename)?;
-            let repo = parse::parse_gir(in_file).expect("Couldn't parse gir file");
-            repo.namespace[0].gen(&mut out_file)?;
-        }
-
+        let file = path.file_name().ok_or_else(|| 
+            anyhow::anyhow!(format!("Cannot get filename for outputwriter")))?;
+        generate_gobject(types)?;
+        let mut path = Path::new(types).join(file);
+        path.set_extension("lua");
+        let mut out_file = BufWriter::new(fs::File::create(path)?);
+        let in_file = open_gir(filename)?;
+        self.gen(in_file, &mut out_file)?;
         Ok(())
     }
 }
@@ -539,21 +545,6 @@ impl Function {
     }
 }
 
-impl Enumeration {
-    pub fn gen<W: Write>(&self, ns: &str, w: &mut W) -> Result<()> {
-        introspectable!(self);
-        writeln!(w, "--- @enum {}.{}", &ns, self.name)?;
-        writeln!(w, "{}.{} = {{", &ns, self.name)?;
-        for mem in self.members.iter() {
-            mem.gen(w)?;
-        }
-        for func in self.functions.iter() {
-            func.gen("", ns, w)?;
-        }
-        Ok(writeln!(w, "}}")?)
-    }
-}
-
 impl Member {
     pub fn gen<W: Write>(&self, w: &mut W) -> Result<()> {
         introspectable!(self);
@@ -615,7 +606,7 @@ impl Constant {
     }
 }
 
-impl Bitfield {
+impl Enumeration {
     pub fn gen<W: Write>(&self, ns: &str, w: &mut W) -> Result<()> {
         introspectable!(self);
         writeln!(w, "--- @enum {}.{}", &ns, self.name)?;
@@ -626,7 +617,98 @@ impl Bitfield {
         for func in self.functions.iter() {
             func.gen("", ns, w)?;
         }
+        Ok(writeln!(w, "}}")?)
+    }
+}
+
+impl Bitfield {
+    pub fn gen<W: Write>(&self, ns: &str, w: &mut W) -> Result<()> {
+        introspectable!(self);
+        writeln!(w, "--- @enum {}.{}", &ns, self.name)?;
+        writeln!(w, "--- @overload fun({{any}}): {}.{}", &ns, self.name)?;
+        writeln!(w, "{}.{} = {{", &ns, self.name)?;
+        for mem in self.members.iter() {
+            mem.gen(w)?;
+        }
+        for func in self.functions.iter() {
+            func.gen("", ns, w)?;
+        }
         writeln!(w, "}}", )?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod test {
+
+    use super::*;
+
+    macro_rules! snapshot {
+        ($name:ident, $path:literal) => {
+            #[test]
+            fn $name() {
+                let gir = include_str!(concat!("../../testdata/girs/", $path));
+                let mut settings = insta::Settings::clone_current();
+                settings.set_snapshot_path("../../testdata/lua/output/");
+                let mut buf = Vec::new();
+                settings.bind(|| {
+                    LuaCodegen::new().gen(gir.as_bytes(), &mut buf).unwrap();
+                    let string = String::from_utf8(buf).unwrap();
+                    insta::assert_snapshot!(
+                        string);
+                });
+            }
+        };
+    }
+
+    macro_rules! genxml {
+        ($name:ident, $path:literal) => {
+        };
+    }
+
+    snapshot!(test_gmime, "GMime-3.0.gir");
+
+    #[test]
+    pub fn test_class() {
+    }
+
+    #[test]
+    pub fn test_functions() {
+    }
+
+    #[test]
+    pub fn test_callback() {
+    }
+
+    #[test]
+    pub fn test_enum() {
+    }
+
+    #[test]
+    pub fn test_record() {
+    }
+
+    #[test]
+    pub fn test_constant() {
+    }
+
+    #[test]
+    pub fn test_bitfield() {
+    }
+
+    #[test]
+    pub fn test_alias() {
+    }
+
+    #[test]
+    pub fn test_unions() {
+    }
+
+    #[test]
+    pub fn test_boxed() {
+    }
+
+    #[test]
+    pub fn test_interfaces() {
     }
 }
