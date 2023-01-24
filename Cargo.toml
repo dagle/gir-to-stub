@@ -1,5 +1,5 @@
 [package]
-name = "gir-to-vimdoc"
+name = "gir-to-stub"
 version = "0.1.0"
 edition = "2021"
 
@@ -14,3 +14,4 @@ xmltree = "0.10.3"
 [dev-dependencies]
 insta = "1.26.0"
 pretty_assertions = "1.3.0"
+simple-xml-builder = "1.1.0"
