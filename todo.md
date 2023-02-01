@@ -1,9 +1,13 @@
 - [x] Buffered IO
-- [ ] Add Readme
+- [x] Add Readme
 - [ ] Generate include-file (or example on how to create one)
 
 - [x] Constructors not using new()
+
+- remove parent_object?
+
 -- [ ] Constructor doesn't take arguments but a tabl
+--- Calls g_objec_new(CLASS, NULL);
 
 - [x] don't generate code for stuff that isn't introspectable
 - [ ] Split the gir into multiple files

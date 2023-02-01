@@ -124,14 +124,8 @@ impl Alias {
 fn gen_default_construtor<W:Write>(ns: &str, constrs: &[Function], w: &mut W) -> Result<()> {
     for constr in constrs {
         if constr.name == "new" {
-            // let param_names = gen_param_names_typed(&constr.parameters, ns).join(", ");
-            let param_names = gen_param_names_typed(&constr.parameters, ns);
             if let Some(ret) = gen_return_names_typed(&constr, ns) {
-                if param_names.len() > 0 {
-                    writeln!(w, "--- @overload fun({{{}}}):{}", param_names.join(", "), ret)?;
-                } else {
-                    writeln!(w, "--- @overload fun():{}", ret)?;
-                }
+                writeln!(w, "--- @overload fun(params: {{}}):{}", ret)?;
             }
             return Ok(())
         }
@@ -253,7 +247,7 @@ impl Field {
 impl Property {
     pub fn gen<W: Write>(&self, ns: &str, w: &mut W) -> Result<()> {
         let typ = show_anytyp(&self.typ, ns);
-        Ok(writeln!(w, "--- @field {} {}", translate_name(&self.name), typ)?)
+        Ok(writeln!(w, "--- @field {} {}", self.name.replace("-", "_"), typ)?)
     }
 }
 
@@ -276,7 +270,7 @@ fn gen_return_signal(fun: &Signal, ns: &str) -> Option<String> {
     Some(param_names.join(", "))
 }
 
-fn translate_name(str: &str) -> String {
+fn signal_name(str: &str) -> String {
     format!("on_{}", str.replace("-", "_"))
 }
 
@@ -286,7 +280,7 @@ impl Signal {
         let mut param_names = gen_param_names_typed(&self.parameters, ns);
         param_names.insert(0, "self".to_string());
         let param_names = param_names.join(", ");
-        let name = translate_name(&self.name);
+        let name = signal_name(&self.name);
         if let Some(ret) = gen_return_signal(self, ns) {
             writeln!(w, "--- @field {} fun({}):{}", name, param_names, ret)?;
         } else {
