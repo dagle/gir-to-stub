@@ -421,8 +421,12 @@ impl Parameter {
     }
 }
 
-fn gen_doc_params<W: Write>(params: &Vec<Parameter>, ns: &str, w: &mut W) -> Result<()> {
-    for param in params.iter().filter(|p| in_param(&p.direction)) {
+fn gen_doc_params<W: Write>(params: &Vec<Parameter>, ns: &str, skip: bool, w: &mut W) -> Result<()> {
+    let mut num = 0;
+    if skip {
+        num = 1;
+    }
+    for param in params.iter().skip(num).filter(|p| in_param(&p.direction)) {
         param.gen(ns,w)?;
     }
     Ok(())
@@ -468,9 +472,14 @@ fn out_param(direction: &Option<ParameterDirection>) -> bool {
     false
 }
 
-fn gen_param_names(params: &Vec<Parameter>) -> String {
+fn gen_param_names(params: &Vec<Parameter>, skip: bool) -> String {
+    let mut num = 0;
+    if skip {
+        num = 1;
+    }
     let param_names: Vec<String> = params
         .iter()
+        .skip(num)
         .filter(|p| in_param(&p.direction))
         .map(|p| unkeyword(&p.name))
         .collect();
@@ -509,9 +518,10 @@ impl Function {
         introspectable!(self);
         self.info.gen(w)?;
         self.doc.gen(w)?;
-        gen_doc_params(&self.parameters, root_ns, w)?;
+        let skip = self.typ == FunctionType::Method;
+        gen_doc_params(&self.parameters, root_ns, skip, w)?;
         gen_doc_return(&self, root_ns, w)?;
-        let param_names = gen_param_names(&self.parameters);
+        let param_names = gen_param_names(&self.parameters, skip);
         match self.typ {
             FunctionType::Callback => panic!("Use gen_callback for callbacks!"),
             FunctionType::Method =>

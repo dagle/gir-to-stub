@@ -245,7 +245,7 @@ pub struct Macro {
     pub parameters: Vec<MacroParam>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum FunctionType {
     Function,
     Callback,
