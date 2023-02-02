@@ -30,20 +30,22 @@ impl LuaCodegen {
 }
 
 impl Generator for LuaCodegen {
-    fn genfile(&self, filename: &str) -> Result<()> {
+    fn genfile(&self, filename: &str, output_dir: Option<&str>) -> Result<()> {
         let path = Path::new(filename);
         if path.extension() != Some(OsStr::new("gir")) {
             return Err(anyhow::anyhow!(format!("{} Filetype isn't gir", path.to_string_lossy())))
         }
-        let types = "types";
-        if !is_dir(types) {
-            fs::create_dir(types)?;
+        let output_dir = output_dir.unwrap_or("types");
+        if !is_dir(output_dir) {
+            fs::create_dir(output_dir)?;
         }
 
         let file = path.file_name().ok_or_else(|| 
             anyhow::anyhow!(format!("Cannot get filename for outputwriter")))?;
-        generate_gobject(types)?;
-        let mut path = Path::new(types).join(file);
+        let file = file.to_str().ok_or_else(||
+            anyhow::anyhow!(format!("Cannot convert filename")))?.replace("-", "_");
+        generate_gobject(output_dir)?;
+        let mut path = Path::new(output_dir).join(file);
         path.set_extension("lua");
         let mut out_file = BufWriter::new(fs::File::create(path)?);
         let in_file = open_gir(filename)?;
@@ -520,7 +522,7 @@ impl Function {
         self.doc.gen(w)?;
         let skip = self.typ == FunctionType::Method;
         gen_doc_params(&self.parameters, root_ns, skip, w)?;
-        gen_doc_return(&self, root_ns, w)?;
+        gen_doc_return(&self, root_ns,  w)?;
         let param_names = gen_param_names(&self.parameters, skip);
         match self.typ {
             FunctionType::Callback => panic!("Use gen_callback for callbacks!"),

@@ -51,6 +51,8 @@ struct Cli {
 
     // #[clap(required = true)]
     filename: Option<String>,
+
+    output: Option<String>,
 }
 
 fn get_lang(lang: Lang) -> Box<dyn lang::Generator> {
@@ -69,10 +71,10 @@ fn main() -> Result<()>{
     let args = Cli::parse();
     let cg = get_lang(args.lang);
     if args.gen_all {
-        cg.generate(None)?;
+        cg.generate(None, args.output.as_deref())?;
     } else {
         let filename = args.filename.expect("Missing filename");
-        cg.generate(Some(&filename))?;
+        cg.generate(Some(&filename), args.output.as_deref())?;
     }
     Ok(())
 }
