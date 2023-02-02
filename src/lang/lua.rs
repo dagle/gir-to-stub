@@ -29,6 +29,14 @@ impl LuaCodegen {
     }
 }
 
+fn fix_filename(str: &str) -> String {
+    str.chars()
+    .map(|x| match x { 
+        '-' | '.' => '_', 
+        _ => x
+    }).collect()
+}
+
 impl Generator for LuaCodegen {
     fn genfile(&self, filename: &str, output_dir: Option<&str>) -> Result<()> {
         let path = Path::new(filename);
@@ -40,10 +48,10 @@ impl Generator for LuaCodegen {
             fs::create_dir(output_dir)?;
         }
 
-        let file = path.file_name().ok_or_else(|| 
+        let file = path.file_stem().ok_or_else(|| 
             anyhow::anyhow!(format!("Cannot get filename for outputwriter")))?;
-        let file = file.to_str().ok_or_else(||
-            anyhow::anyhow!(format!("Cannot convert filename")))?.replace("-", "_");
+        let file = fix_filename(file.to_str().ok_or_else(||
+            anyhow::anyhow!(format!("Cannot convert filename")))?);
         generate_gobject(output_dir)?;
         let mut path = Path::new(output_dir).join(file);
         path.set_extension("lua");
