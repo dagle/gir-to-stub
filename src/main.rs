@@ -49,10 +49,12 @@ struct Cli {
     #[clap(default_value_t = false)]
     gen_all: bool,
 
+    #[clap(short, long)]
+    output: Option<String>,
+
     // #[clap(required = true)]
     filename: Option<String>,
 
-    output: Option<String>,
 }
 
 fn get_lang(lang: Lang) -> Box<dyn lang::Generator> {
