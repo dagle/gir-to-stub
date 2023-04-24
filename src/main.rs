@@ -2,7 +2,6 @@ use std::str::FromStr;
 use std::fs;
 
 mod library;
-mod parse;
 mod lang;
 
 use anyhow::Result;

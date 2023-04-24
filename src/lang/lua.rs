@@ -22,10 +22,10 @@ impl LuaCodegen {
 }
 
 impl LuaCodegen {
-    fn gen<R: Read>(&self, r: R,  p: &Path) -> Result<()> {
+    fn gen<R: Read>(&self, r: R,  dir: &str, p: &Path) -> Result<()> {
         let repo = parse::parse_gir(r).expect("Couldn't parse gir file");
 
-        repo.namespace[0].gen(p)?;
+        repo.namespace[0].gen(dir, p)?;
         Ok(())
     }
 }
@@ -50,23 +50,24 @@ impl Generator for LuaCodegen {
             anyhow::anyhow!(format!("Cannot convert filename")))?);
 
         let output_dir = Path::new(output_dir.unwrap_or("types"));
-        let output_dir = output_dir.join(file);
-        if !output_dir.is_dir() {
-            fs::create_dir(&output_dir)?;
-        }
 
+        let output_dir = output_dir.join(&file).join(&file);
+        println!("{:?}", output_dir);
+        if !output_dir.is_dir() {
+            fs::create_dir_all(&output_dir)?;
+        }
+        println!("{:?}", output_dir);
         generate_gobject(&output_dir)?;
-        // let path = output_dir.join("init.lua");
-        // path.set_extension("lua");
-        // let mut out_file = BufWriter::new(fs::File::create(path)?);
+
         let in_file = open_gir(filename)?;
-        self.gen(in_file, &output_dir)?;
+        self.gen(in_file, &file, &output_dir)?;
         Ok(())
     }
 }
 
 fn generate_gobject<P: AsRef<Path>>(path: &P) -> Result<()> {
-    let path = Path::new(path.as_ref()).join("GObject.lua");
+    // let path = Path::new(path.as_ref()).join("GObject").join("init.lua");
+    let path = Path::new(path.as_ref()).join("init.lua");
     let mut w = &fs::File::create(path)?;
 
     writeln!(w, "--- @class GObject.Object")?;
@@ -99,7 +100,7 @@ fn gen_file(ns: &str, p: &Path) -> Result<BufWriter<File>> {
 }
 
 impl Namespace {
-    pub fn gen(&self, p: &Path) -> Result<()> {
+    pub fn gen(&self, dir: &str, p: &Path) -> Result<()> {
         let name = self.name.as_ref().context("Failed to read name")?;
         let mut w = gen_file("init", p)?;
         writeln!(w, "local {} = {{}}\n", name)?;
@@ -115,9 +116,7 @@ impl Namespace {
         }
         writeln!(w)?;
         for class in self.classes.iter() {
-            writeln!(w, "local _{} = require('{}')", class.name, class.name)?;
-            // writeln!(w, "---@module {}", class.name)?;
-            // writeln!(w, "local {}", class.name)?;
+            writeln!(w, "local _{} = require('{}.{}')", class.name, dir, class.name)?;
             writeln!(w, "{}.{} = _{}\n", name, class.name, class.name)?;
             class.gen(name, p)?;
         }
@@ -125,7 +124,7 @@ impl Namespace {
             if record.name.ends_with("Class") {
                 continue;
             }
-            writeln!(w, "local _{} = require('{}')", record.name, record.name)?;
+            writeln!(w, "local _{} = require('{}.{}')", record.name, dir, record.name)?;
             writeln!(w, "{}.{} = _{}\n", name, record.name, record.name)?;
             record.gen(name, p)?;
         }
