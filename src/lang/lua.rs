@@ -1,7 +1,8 @@
 use std::{ffi::OsStr, io::BufWriter};
 use std::io::{Write, Read};
 use std::fs;
-use crate::{library::*, parse};
+use crate::library::*;
+use crate::parse;
 use std::path::Path;
 use super::*;
 use anyhow::{Result, Context};
@@ -18,6 +19,12 @@ pub struct LuaCodegen {
 impl LuaCodegen {
     pub fn new() -> LuaCodegen {
         LuaCodegen{}
+    }
+}
+
+impl Default for LuaCodegen {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -134,7 +141,7 @@ impl Namespace {
         section!(&mut w, self, name, bitfield);
 
         for function in self.functions.iter() {
-            function.gen(&name, &name, &mut w)?;
+            function.gen(name, name, &mut w)?;
         }
 
         section!(&mut w, self, name, constant);
@@ -156,7 +163,7 @@ impl Alias {
 fn gen_default_construtor<W:Write>(ns: &str, constrs: &[Function], w: &mut W) -> Result<()> {
     for constr in constrs {
         if constr.name == "new" {
-            if let Some(ret) = gen_return_names_typed(&constr, ns) {
+            if let Some(ret) = gen_return_names_typed(constr, ns) {
                 writeln!(w, "--- @overload fun(params: {{}}):{}", ret)?;
             }
             return Ok(())
@@ -178,7 +185,7 @@ impl Class {
         introspectable!(self);
         self.info.gen(w)?;
         if let Some(ref parent) = self.parent {
-            writeln!(w, "--- @class {}.{} : {}", ns, self.name, translate_ns(parent, &ns))?;
+            writeln!(w, "--- @class {}.{} : {}", ns, self.name, translate_ns(parent, ns))?;
         } else {
             writeln!(w, "--- @class {}.{}", ns, self.name)?;
         }
@@ -195,38 +202,37 @@ impl Class {
 
         self.gen_type(ns, &mut w)?;
 
-        // let class_ns = format!("{}.{}", ns, self.name);
-        let class_ns = format!("{}", self.name);
+        // let class_ns = &self.name;
 
-        // section!(&mut w, self, class_ns, implements);
+        // section!(&mut w, self, self.name, implements);
 
         for constructor in self.constructor.iter() {
-            constructor.gen(&class_ns, ns, &mut w)?;
+            constructor.gen(&self.name, ns, &mut w)?;
         }
         for method in self.method.iter() {
             method.gen(&self.name, ns, &mut w)?;
         }
         for func in self.functions.iter() {
-            func.gen(&class_ns, ns, &mut w)?;
+            func.gen(&self.name, ns, &mut w)?;
         }
         // TODO: Should we re-add this in some way?
 
         // if !self.virtual_method.is_empty() {
         //     for virt in self.virtual_method.iter() {
-        //         virt.gen_method(&class_ns, ns, &mut w)?;
+        //         virt.gen_method(&self.name, ns, &mut w)?;
         //     }
         // }
         for callback in self.callbacks.iter() {
-            callback.gen(&class_ns, ns, &mut w)?;
+            callback.gen(&self.name, ns, &mut w)?;
         }
 
-        // section!(&mut w, self, class_ns, record);
-        // section!(&mut w, self, class_ns, unions);
-        // section!(&mut w, self, class_ns, constant);
+        // section!(&mut w, self, self.name, record);
+        // section!(&mut w, self, self.name, unions);
+        // section!(&mut w, self, self.name, constant);
 
         writeln!(w, "--- @param obj GObject.Object")?;
         writeln!(w, "--- @return boolean")?;
-        writeln!(w, "function {}:is_type_of(obj) end", class_ns)?;
+        writeln!(w, "function {}:is_type_of(obj) end", self.name)?;
 
         writeln!(w, "return {}", &self.name)?;
         w.flush()?;
@@ -287,31 +293,34 @@ impl Field {
 impl Property {
     pub fn gen<W: Write>(&self, ns: &str, w: &mut W) -> Result<()> {
         let typ = show_anytyp(&self.typ, ns);
-        Ok(writeln!(w, "--- @field {} {}", self.name.replace("-", "_"), typ)?)
+        Ok(writeln!(w, "--- @field {} {}", self.name.replace('-', "_"), typ)?)
     }
 }
 
 fn gen_return_signal(fun: &Signal, ns: &str) -> Option<String> {
     let mut params = vec![];
 
-    fun.ret.as_ref().map(|p| params.push(p));
+    if let Some(ref p) = fun.ret {
+        params.push(p)
+    }
+
     for p in fun.parameters.iter().filter(|p| out_param(&p.direction)) {
         params.push(p)
     }
 
-    if params.len() > 0 {
+    if params.is_empty() {
         return None
     }
 
     let param_names: Vec<String> = params
         .iter()
-        .map(|p| show_anytyp(&p.typ, &ns))
+        .map(|p| show_anytyp(&p.typ, ns))
         .collect();
     Some(param_names.join(", "))
 }
 
 fn signal_name(str: &str) -> String {
-    format!("on_{}", str.replace("-", "_"))
+    format!("on_{}", str.replace('-', "_"))
 }
 
 impl Signal {
@@ -330,7 +339,7 @@ impl Signal {
     }
 }
 
-static KEYWORDS: &'static [&str] = &[
+const KEYWORDS: &'static [&'static str] = &[
     "and",       "break",     "do",        "else",      "elseif",
     "end",       "false",     "for",       "function",  "if",
     "in",        "local",     "nil",       "not",       "or",
@@ -364,7 +373,7 @@ fn show_anytyp(typ: &AnyType, ns: &str) -> String {
                         let value = show_anytyp(&typ.children[1], ns);
                         format!("table<{}, {}>", key, value)
                     },
-                    _ => translate(&name, ns),
+                    _ => translate(name, ns),
                 }
             } else {
                 "any".to_string()
@@ -403,7 +412,7 @@ fn translate(name: &str, ns: &str) -> String {
 }
 
 fn translate_ns(name: &str, ns: &str) -> String {
-    if !name.contains(".") {
+    if !name.contains('.') {
         return format!("{}.{}", ns, name)
     }
     name.to_string()
@@ -422,7 +431,7 @@ impl InfoElements {
     fn gen<W: Write>(&self, w: &mut W) -> Result<()> {
         if let Some(ref docs) = self.doc {
             let luafied = docs.content.replace("%NULL", "nil");
-            let lines = luafied.split("\n");
+            let lines = luafied.split('\n');
             for line in lines {
                 writeln!(w, "--- {}", line)?;
             }
@@ -452,7 +461,7 @@ impl Parameter {
         let opt = optional(self);
         if let Some(ref doc) = self.doc.doc {
             let luafied = doc.content.replace("%NULL", "nil");
-            let docstr = luafied.replace("\n", "");
+            let docstr = luafied.replace('\n', "");
             writeln!(w, "--- @param {} {}{} {}", unkeyword(&self.name), type_str, opt, docstr)?;
         } else {
             writeln!(w, "--- @param {} {}{}", unkeyword(&self.name), opt, type_str)?;
@@ -461,7 +470,7 @@ impl Parameter {
     }
 }
 
-fn gen_doc_params<W: Write>(params: &Vec<Parameter>, ns: &str, skip: bool, w: &mut W) -> Result<()> {
+fn gen_doc_params<W: Write>(params: &[Parameter], ns: &str, skip: bool, w: &mut W) -> Result<()> {
     let mut num = 0;
     if skip {
         num = 1;
@@ -475,7 +484,10 @@ fn gen_doc_params<W: Write>(params: &Vec<Parameter>, ns: &str, skip: bool, w: &m
 fn gen_doc_return<W: Write>(fun: &Function, ns: &str, w: &mut W) -> Result<()> {
     let mut params = vec![];
 
-    fun.ret.as_ref().map(|p| params.push(p));
+    if let Some(ref p) = fun.ret {
+        params.push(p)
+    }
+
     for p in fun.parameters.iter().filter(|p| out_param(&p.direction)) {
         params.push(p)
     }
@@ -490,7 +502,7 @@ fn gen_doc_return<W: Write>(fun: &Function, ns: &str, w: &mut W) -> Result<()> {
                 rets.push(type_str);
             }
         }
-        if rets.len() > 0 {
+        if !rets.is_empty() {
             let retlist = rets.join(", ");
             writeln!(w, "--- @return {}", retlist)?;
         }
@@ -512,7 +524,7 @@ fn out_param(direction: &Option<ParameterDirection>) -> bool {
     false
 }
 
-fn gen_param_names(params: &Vec<Parameter>, skip: bool) -> String {
+fn gen_param_names(params: &[Parameter], skip: bool) -> String {
     let mut num = 0;
     if skip {
         num = 1;
@@ -526,29 +538,32 @@ fn gen_param_names(params: &Vec<Parameter>, skip: bool) -> String {
     param_names.join(", ")
 }
 
-fn gen_param_names_typed(params: &Vec<Parameter>, ns: &str) -> Vec<String> {
+fn gen_param_names_typed(params: &[Parameter], ns: &str) -> Vec<String> {
     params
         .iter()
         .filter(|p| in_param(&p.direction))
-        .map(|p| format!("{}: {}", unkeyword(&p.name), show_anytyp(&p.typ, &ns)))
+        .map(|p| format!("{}: {}", unkeyword(&p.name), show_anytyp(&p.typ, ns)))
         .collect()
 }
 
 fn gen_return_names_typed(fun: &Function, ns: &str) -> Option<String> {
     let mut params = vec![];
 
-    fun.ret.as_ref().map(|p| params.push(p));
+    if let Some(ref p) = fun.ret {
+        params.push(p)
+    }
+
     for p in fun.parameters.iter().filter(|p| out_param(&p.direction)) {
         params.push(p)
     }
 
-    if params.len() <= 0 {
+    if params.is_empty() {
         return None
     }
 
     let param_names: Vec<String> = params
         .iter()
-        .map(|p| show_anytyp(&p.typ, &ns))
+        .map(|p| show_anytyp(&p.typ, ns))
         .collect();
     Some(param_names.join(", "))
 }
@@ -560,7 +575,7 @@ impl Function {
         self.doc.gen(w)?;
         let skip = self.typ == FunctionType::Method;
         gen_doc_params(&self.parameters, root_ns, skip, w)?;
-        gen_doc_return(&self, root_ns,  w)?;
+        gen_doc_return(self, root_ns,  w)?;
         let param_names = gen_param_names(&self.parameters, skip);
         match self.typ {
             FunctionType::Callback => panic!("Use gen_callback for callbacks!"),
@@ -580,7 +595,7 @@ impl Function {
     pub fn gen_callback_type<W: Write>(&self, ns: &str, w: &mut W) -> Result<()> {
         introspectable!(self);
         let param_names = gen_param_names_typed(&self.parameters, ns).join(", ");
-        if let Some(ret) = gen_return_names_typed(&self, ns) {
+        if let Some(ret) = gen_return_names_typed(self, ns) {
             writeln!(w, "--- @alias {}.{} fun({}):{}", ns, self.name, param_names, ret)?;
         } else {
             writeln!(w, "--- @alias {}.{} fun({})", ns, self.name, param_names)?;

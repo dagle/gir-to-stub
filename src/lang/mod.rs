@@ -2,7 +2,7 @@ use std::{str::FromStr, path::Path, fs::{self, File}, io::BufReader};
 use anyhow::Result;
 
 pub mod lua;
-pub mod python;
+// pub mod python;
 
 #[derive(Clone)]
 pub enum Level {
@@ -41,7 +41,7 @@ pub trait Generator {
     fn genfile(&self, filename: &str, output_dir: Option<&str>) -> Result<()>;
     fn generate(&self, filename: Option<&str>, output_dir: Option<&str>) -> Result<()> {
         if let Some(filename) = filename {
-            self.genfile(&filename, output_dir)
+            self.genfile(filename, output_dir)
         } else {
             let paths = fs::read_dir("/usr/share/gir-1.0/")?;
             for path in paths {
@@ -55,12 +55,12 @@ pub trait Generator {
     }
 }
 
-pub trait Gen {
-}
+// pub trait Gen {
+// }
 
-fn is_dir(dir: &str) -> bool {
-    Path::new(dir).is_dir()
-}
+// fn is_dir(dir: &str) -> bool {
+//     Path::new(dir).is_dir()
+// }
 
 /// Try to open the file at path, if it fails,
 /// it will try to search for the path in gir directory

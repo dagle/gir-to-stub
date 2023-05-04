@@ -1,8 +1,6 @@
 use std::str::FromStr;
-use std::fs;
 
-mod library;
-mod lang;
+use gir_to_stub::lang;
 
 use anyhow::Result;
 
@@ -10,7 +8,7 @@ use clap::Parser;
 
 #[derive(Clone)]
 enum Lang {
-    Python,
+    // Python,
     Lua,
 }
 
@@ -20,7 +18,7 @@ impl FromStr for Lang {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "lua" => Ok(Lang::Lua),
-            "python" => Ok(Lang::Python),
+            // "python" => Ok(Lang::Python),
             lang => {
                 let ret = format!("{} not supported", lang);
                 Err(ret)
@@ -58,9 +56,9 @@ struct Cli {
 
 fn get_lang(lang: Lang) -> Box<dyn lang::Generator> {
     match lang {
-        Lang::Python => {
-            Box::new(lang::python::PythonCodeGen::new())
-        }
+        // Lang::Python => {
+        //     Box::new(lang::python::PythonCodeGen::new())
+        // }
         Lang::Lua => {
             Box::new(lang::lua::LuaCodegen::new())
         },

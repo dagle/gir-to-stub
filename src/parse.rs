@@ -69,9 +69,9 @@ impl FromStr for Transfer {
     }
 }
 
-fn get_attribute(e: &Element, attr: &str) -> Option<String> {
-    e.attributes.get(attr).map(|x| x.to_string())
-}
+// fn get_attribute(e: &Element, attr: &str) -> Option<String> {
+//     e.attributes.get(attr).map(|x| x.to_string())
+// }
 
 fn r_anytype(e: &Element) -> Option<AnyType> {
     match e.name.as_str() {
@@ -98,7 +98,7 @@ fn r_anytype(e: &Element) -> Option<AnyType> {
                     }
                 }
             }
-            return Some(AnyType::Type(Type{
+            Some(AnyType::Type(Type{
                 name,
                 ctype,
                 introspectable,
@@ -130,7 +130,7 @@ fn r_anytype(e: &Element) -> Option<AnyType> {
             None
         }
         "varargs" => {
-            return Some(AnyType::VarArg)
+            Some(AnyType::VarArg)
         }
         _ => None
     }
@@ -246,7 +246,7 @@ fn read_params(e: &Element) -> Option<Vec<Parameter>> {
             }
         }
     }
-    return Some(ret)
+    Some(ret)
 }
 
 fn read_macro_param(e: &Element) -> Option<MacroParam> {
@@ -456,23 +456,23 @@ fn read_infoelements(e: &Element) -> Option<InfoElements> {
         if let Some(e) = node.as_element() {
             match e.name.as_str() {
                 "doc" => {
-                    let docs = get_doc(&e);
+                    let docs = get_doc(e);
                     doc = docs;
                 }
                 "doc-stability" => {
-                    let docs = get_doc_versioned(&e);
+                    let docs = get_doc_versioned(e);
                     doc_stability = docs;
                 }
                 "doc-deprecated" => {
-                    let docs = get_doc_versioned(&e);
+                    let docs = get_doc_versioned(e);
                     doc_deprecated = docs;
                 }
                 "doc-version" => {
-                    let docs = get_doc_versioned(&e);
+                    let docs = get_doc_versioned(e);
                     doc_version = docs;
                 }
                 "source-position" => {
-                    let docs = get_source_position(&e);
+                    let docs = get_source_position(e);
                     doc_pos = docs;
                 }
                 _ => {}
@@ -727,7 +727,7 @@ fn read_constant(e: &Element) -> Option<Constant> {
     let c_type = attribute(e, "type");
     let typ = read_anytype(e);
 
-    return Some(Constant {
+    Some(Constant {
         name,
         c_identifier,
         info,
@@ -781,7 +781,7 @@ fn read_union(e: &Element) -> Option<Union> {
                         fields.push(fun)
                     }
                 }
-                name => {
+                _name => {
                 }
             }
         }
@@ -832,7 +832,7 @@ fn read_namespace(e: &Element) -> Option<Namespace> {
         if let Some(e) = node.as_element() {
             match e.name.as_str() {
                 "class" => {
-                    if let Some(class) = read_class(&e) {
+                    if let Some(class) = read_class(e) {
                         classes.push(class);
                     }
                 }
@@ -934,13 +934,10 @@ fn read_alias(e: &Element) -> Option<Alias> {
     // XXX: Should we even do this?
     for node in e.children.iter() {
         if let Some(e) = node.as_element() {
-            match e.name.as_str() {
-                "constructor" => {
-                    if let Some(fun) = read_function(e, FunctionType::Constructor) {
-                        functions.push(fun) 
-                    }
+            if e.name.as_str() == "constructor" {
+                if let Some(fun) = read_function(e, FunctionType::Constructor) {
+                    functions.push(fun) 
                 }
-                _ => {}
             }
         }
     }
@@ -955,7 +952,6 @@ fn read_alias(e: &Element) -> Option<Alias> {
 
 fn read_interface(e: &Element) -> Option<Interface> {
     let info = read_infoattrs(e)?;
-    let doc = read_infoelements(e)?;
     let name = attribute(e, "name")?;
 
     let glib_type_name = attribute(e, "type-name")?;
@@ -1215,7 +1211,7 @@ where
     if let Some(value_str) = e.attributes.get(name) {
         match T::from_str(value_str) {
             Ok(value) => Some(value),
-            Err(error) => None 
+            Err(_error) => None 
         }
     } else {
         None
