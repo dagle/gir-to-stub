@@ -59,11 +59,9 @@ impl Generator for LuaCodegen {
         let output_dir = Path::new(output_dir.unwrap_or("types"));
 
         let output_dir = output_dir.join(&file).join(&file);
-        println!("{:?}", output_dir);
         if !output_dir.is_dir() {
             fs::create_dir_all(&output_dir)?;
         }
-        println!("{:?}", output_dir);
         generate_gobject(&output_dir)?;
 
         let in_file = open_gir(filename)?;
@@ -359,9 +357,23 @@ fn show_anytyp(typ: &AnyType, ns: &str) -> String {
     match typ {
         AnyType::Array(array) => {
             let typ = array.typ.clone();
-            let mut array = translate(&typ, ns);
-            array.push_str("[]");
-            array
+            if let Some(name) = &array.name {
+                if name == "GLib.ByteArray" && typ == "guint8" {
+                    "string".to_string()
+                } else {
+                    let mut array = translate(&typ, ns);
+                    array.push_str("[]");
+                    array
+                }
+            } else {
+                if typ == "guint8" {
+                    return "string".to_string()
+                }
+                let typ = array.typ.clone();
+                let mut array = translate(&typ, ns);
+                array.push_str("[]");
+                array
+            }
         },
         AnyType::Type(typ) => {
             if let Some(name) = &typ.name {
@@ -481,7 +493,7 @@ fn gen_doc_params<W: Write>(params: &[Parameter], ns: &str, skip: bool, w: &mut 
     Ok(())
 }
 
-fn gen_doc_return<W: Write>(fun: &Function, ns: &str, w: &mut W) -> Result<()> {
+fn gen_doc_return<W: Write>(fun: &Function, ns: &str, w: &mut W) -> Result<Option<String>> {
     let mut params = vec![];
 
     if let Some(ref p) = fun.ret {
@@ -504,10 +516,11 @@ fn gen_doc_return<W: Write>(fun: &Function, ns: &str, w: &mut W) -> Result<()> {
         }
         if !rets.is_empty() {
             let retlist = rets.join(", ");
-            writeln!(w, "--- @return {}", retlist)?;
+            return Ok(Some(retlist));
+            // writeln!(w, "--- @return {}", retlist)?;
         }
     }
-    Ok(())
+    Ok(None)
 }
 
 fn in_param(direction: &Option<ParameterDirection>) -> bool {
@@ -575,18 +588,32 @@ impl Function {
         self.doc.gen(w)?;
         let skip = self.typ == FunctionType::Method;
         gen_doc_params(&self.parameters, root_ns, skip, w)?;
-        gen_doc_return(self, root_ns,  w)?;
+        let ret = gen_doc_return(self, root_ns,  w)?;
         let param_names = gen_param_names(&self.parameters, skip);
         match self.typ {
             FunctionType::Callback => panic!("Use gen_callback for callbacks!"),
-            FunctionType::Method =>
-                writeln!(w, "function {}:{}({}) end\n", &ns, self.name, param_names)?,
+            FunctionType::Method => {
+                if let Some(ret) = ret {
+                    writeln!(w, "--- @return {}", ret)?;
+                }
+                writeln!(w, "function {}:{}({}) end\n", &ns, self.name, param_names)?
+            },
             FunctionType::Virtual => todo!(),
-            FunctionType::Member =>
-                writeln!(w, "\t[\"{}\"] = function({}) end,\n", self.name.to_uppercase(), param_names)?,
-            FunctionType::Function =>
-                writeln!(w, "function {}.{}({}) end\n", &ns, self.name, param_names)?,
+            FunctionType::Member => {
+                if let Some(ret) = ret {
+                    writeln!(w, "--- @return {}", ret)?;
+                }
+                writeln!(w, "\t[\"{}\"] = function({}) end,\n",
+                    self.name.to_uppercase(), param_names)?
+            }
+            FunctionType::Function => {
+                if let Some(ret) = ret {
+                    writeln!(w, "--- @return {}", ret)?;
+                }
+                writeln!(w, "function {}.{}({}) end\n", &ns, self.name, param_names)?
+            }
             FunctionType::Constructor => {
+                writeln!(w, "--- @return {}.{}", root_ns, ns)?;
                 writeln!(w, "function {}.{}({}) end\n", &ns, self.name, param_names)?;
             },
         }
