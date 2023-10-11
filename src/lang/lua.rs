@@ -3,7 +3,7 @@ use std::io::{Write, Read};
 use std::fs;
 use crate::library::*;
 use crate::parse;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use super::*;
 use anyhow::{Result, Context};
 
@@ -13,20 +13,22 @@ use anyhow::{Result, Context};
 
 // struct LuaDoc {}
 pub struct LuaCodegen {
-    // level: Level
+    gir: PathBuf,
+    dir: PathBuf,
+    dirname: String,
 }
 
-impl LuaCodegen {
-    pub fn new() -> LuaCodegen {
-        LuaCodegen{}
-    }
-}
+// impl LuaCodegen {
+    // pub fn new() -> LuaCodegen {
+    //     LuaCodegen{}
+    // }
+// }
 
-impl Default for LuaCodegen {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+// impl Default for LuaCodegen {
+//     fn default() -> Self {
+//         Self::new()
+//     }
+// }
 
 impl LuaCodegen {
     fn gen<R: Read>(&self, r: R,  dir: &str, p: &Path) -> Result<()> {
@@ -45,9 +47,10 @@ fn fix_filename(str: &str) -> String {
     }).collect()
 }
 
-impl Generator for LuaCodegen {
-    fn genfile(&self, filename: &str, output_dir: Option<&str>) -> Result<()> {
-        let path = Path::new(filename);
+impl LuaCodegen {
+    fn new(filename: &str, output_dir: &str) -> Result<Self> {
+        let path = Path::new(filename).to_owned();
+
         if path.extension() != Some(OsStr::new("gir")) {
             return Err(anyhow::anyhow!(format!("{} Filetype isn't gir", path.to_string_lossy())))
         }
@@ -56,31 +59,34 @@ impl Generator for LuaCodegen {
         let file = fix_filename(file.to_str().ok_or_else(||
             anyhow::anyhow!(format!("Cannot convert filename")))?);
 
-        let output_dir = Path::new(output_dir.unwrap_or("types"));
+        let output_dir = Path::new(output_dir);
 
         let output_dir = output_dir.join(&file).join(&file);
-        println!("{:?}", output_dir);
-        if !output_dir.is_dir() {
-            fs::create_dir_all(&output_dir)?;
-        }
-        println!("{:?}", output_dir);
-        generate_gobject(&output_dir)?;
 
-        let in_file = open_gir(filename)?;
-        self.gen(in_file, &file, &output_dir)?;
+        let gir = get_gir(path)?;
+
+        Ok(LuaCodegen { dirname: file, gir, dir: output_dir })
+    }
+
+    fn generate(&self, filename: &str) -> Result<()> {
+        self.generate_gobject()?;
+
+        let gir_file = open_gir(&self.gir)?;
+        let repo = parse::parse_gir(gir_file)?;
+
+        repo.namespace[0].gen(&self.dirname, &self.dir)?;
         Ok(())
     }
-}
 
-fn generate_gobject<P: AsRef<Path>>(path: &P) -> Result<()> {
-    // let path = Path::new(path.as_ref()).join("GObject").join("init.lua");
-    let path = Path::new(path.as_ref()).join("init.lua");
-    let mut w = &fs::File::create(path)?;
+    fn generate_gobject<>(&self) -> Result<()> {
+        let path = self.dir.join("init.lua");
+        let mut w = fs::File::create(path)?;
 
-    writeln!(w, "--- @class GObject.Object")?;
-    writeln!(w, "local Object = {{}}")?;
+        writeln!(w, "--- @class GObject.Object")?;
+        writeln!(w, "local Object = {{}}")?;
 
-    Ok(())
+        Ok(())
+    }
 }
 
 macro_rules! section {
@@ -107,9 +113,9 @@ fn gen_file(ns: &str, p: &Path) -> Result<BufWriter<File>> {
 }
 
 impl Namespace {
-    pub fn gen(&self, dir: &str, p: &Path) -> Result<()> {
+    pub fn gen(&self, dirname: &str, dir: &Path) -> Result<()> {
         let name = self.name.as_ref().context("Failed to read name")?;
-        let mut w = gen_file("init", p)?;
+        let mut w = gen_file("init", dir)?;
         writeln!(w, "local {} = {{}}\n", name)?;
 
         for types in self.record.iter() {
@@ -123,17 +129,17 @@ impl Namespace {
         }
         writeln!(w)?;
         for class in self.classes.iter() {
-            writeln!(w, "local _{} = require('{}.{}')", class.name, dir, class.name)?;
+            writeln!(w, "local _{} = require('{}.{}')", class.name, dirname, class.name)?;
             writeln!(w, "{}.{} = _{}\n", name, class.name, class.name)?;
-            class.gen(name, p)?;
+            class.gen(name, dir)?;
         }
         for record in self.record.iter() {
             if record.name.ends_with("Class") {
                 continue;
             }
-            writeln!(w, "local _{} = require('{}.{}')", record.name, dir, record.name)?;
+            writeln!(w, "local _{} = require('{}.{}')", record.name, dirname, record.name)?;
             writeln!(w, "{}.{} = _{}\n", name, record.name, record.name)?;
-            record.gen(name, p)?;
+            record.gen(name, dir)?;
         }
         // section!(&mut w, self, name, record);
 
@@ -359,9 +365,23 @@ fn show_anytyp(typ: &AnyType, ns: &str) -> String {
     match typ {
         AnyType::Array(array) => {
             let typ = array.typ.clone();
-            let mut array = translate(&typ, ns);
-            array.push_str("[]");
-            array
+            if let Some(name) = &array.name {
+                if name == "GLib.ByteArray" && typ == "guint8" {
+                    "string".to_string()
+                } else {
+                    let mut array = translate(&typ, ns);
+                    array.push_str("[]");
+                    array
+                }
+            } else {
+                if typ == "guint8" {
+                    return "string".to_string()
+                }
+                let typ = array.typ.clone();
+                let mut array = translate(&typ, ns);
+                array.push_str("[]");
+                array
+            }
         },
         AnyType::Type(typ) => {
             if let Some(name) = &typ.name {
@@ -481,7 +501,7 @@ fn gen_doc_params<W: Write>(params: &[Parameter], ns: &str, skip: bool, w: &mut 
     Ok(())
 }
 
-fn gen_doc_return<W: Write>(fun: &Function, ns: &str, w: &mut W) -> Result<()> {
+fn gen_doc_return<W: Write>(fun: &Function, ns: &str, w: &mut W) -> Result<Option<String>> {
     let mut params = vec![];
 
     if let Some(ref p) = fun.ret {
@@ -504,10 +524,11 @@ fn gen_doc_return<W: Write>(fun: &Function, ns: &str, w: &mut W) -> Result<()> {
         }
         if !rets.is_empty() {
             let retlist = rets.join(", ");
-            writeln!(w, "--- @return {}", retlist)?;
+            return Ok(Some(retlist));
+            // writeln!(w, "--- @return {}", retlist)?;
         }
     }
-    Ok(())
+    Ok(None)
 }
 
 fn in_param(direction: &Option<ParameterDirection>) -> bool {
@@ -575,18 +596,32 @@ impl Function {
         self.doc.gen(w)?;
         let skip = self.typ == FunctionType::Method;
         gen_doc_params(&self.parameters, root_ns, skip, w)?;
-        gen_doc_return(self, root_ns,  w)?;
+        let ret = gen_doc_return(self, root_ns,  w)?;
         let param_names = gen_param_names(&self.parameters, skip);
         match self.typ {
             FunctionType::Callback => panic!("Use gen_callback for callbacks!"),
-            FunctionType::Method =>
-                writeln!(w, "function {}:{}({}) end\n", &ns, self.name, param_names)?,
+            FunctionType::Method => {
+                if let Some(ret) = ret {
+                    writeln!(w, "--- @return {}", ret)?;
+                }
+                writeln!(w, "function {}:{}({}) end\n", &ns, self.name, param_names)?
+            },
             FunctionType::Virtual => todo!(),
-            FunctionType::Member =>
-                writeln!(w, "\t[\"{}\"] = function({}) end,\n", self.name.to_uppercase(), param_names)?,
-            FunctionType::Function =>
-                writeln!(w, "function {}.{}({}) end\n", &ns, self.name, param_names)?,
+            FunctionType::Member => {
+                if let Some(ret) = ret {
+                    writeln!(w, "--- @return {}", ret)?;
+                }
+                writeln!(w, "\t[\"{}\"] = function({}) end,\n",
+                    self.name.to_uppercase(), param_names)?
+            }
+            FunctionType::Function => {
+                if let Some(ret) = ret {
+                    writeln!(w, "--- @return {}", ret)?;
+                }
+                writeln!(w, "function {}.{}({}) end\n", &ns, self.name, param_names)?
+            }
             FunctionType::Constructor => {
+                writeln!(w, "--- @return {}.{}", root_ns, ns)?;
                 writeln!(w, "function {}.{}({}) end\n", &ns, self.name, param_names)?;
             },
         }
@@ -697,232 +732,3 @@ impl Bitfield {
         Ok(())
     }
 }
-
-// #[cfg(test)]
-// mod test {
-//
-//     use super::*;
-//     use simple_xml_builder::XMLElement;
-//
-//     macro_rules! snapshot {
-//         ($name:ident, $path:literal) => {
-//             #[test]
-//             fn $name() {
-//                 let gir = include_str!(concat!("../../testdata/girs/", $path));
-//                 let mut settings = insta::Settings::clone_current();
-//                 settings.set_snapshot_path("../../testdata/lua/output/");
-//                 let mut buf = Vec::new();
-//                 settings.bind(|| {
-//                     LuaCodegen::new().gen(gir.as_bytes(), &mut buf).unwrap();
-//                     let string = String::from_utf8(buf).unwrap();
-//                     insta::assert_snapshot!(
-//                         string);
-//                 });
-//             }
-//         };
-//     }
-//
-//     fn gengir(child :XMLElement) -> String {
-//         let mut repo = XMLElement::new("repository");
-//         repo.add_attribute("version", "1.2");
-//         repo.add_attribute("xmlns", "http://www.gtk.org/introspection/core/1.0");
-//         repo.add_attribute("xmlns:c", "http://www.gtk.org/introspection/c/1.0");
-//         repo.add_attribute("xmlns:glib", "http://www.gtk.org/introspection/c/1.0");
-//         let mut ns = XMLElement::new("namespace");
-//         ns.add_attribute("name", "Test");
-//         ns.add_child(child);
-//         repo.add_child(ns);
-//
-//         let mut buf = Vec::new();
-//         repo.write(&mut buf).unwrap();
-//         String::from_utf8(buf).unwrap()
-//     }
-//
-//     fn parse_test(child :XMLElement) -> String {
-//         let gir = gengir(child);
-//
-//         let mut buf = Vec::new();
-//         LuaCodegen::new().gen(gir.as_bytes(), &mut buf).unwrap();
-//         String::from_utf8(buf).unwrap()
-//     }
-//
-//     snapshot!(test_gmime, "GMime-3.0.gir");
-//
-//     #[test]
-//     pub fn test_class() {
-//         let mut class = XMLElement::new("class");
-//         class.add_attribute("name", "TestClass");
-//         class.add_attribute("type-name", "TestTestClass");
-//         class.add_attribute("get-type", "test_test_get_type");
-//
-//         let code = parse_test(class);
-//
-//         insta::assert_snapshot!(code, @r###"
-//         ---@diagnostic disable: unused-local, duplicate-doc-field
-//         ---@meta
-//         -- THIS FILE WAS GENERATED BY gir-to-stub! DO NOT MODIFY!
-//         local Test = {}
-//
-//         --- @class Test.TestClass
-//         local TestClass = {}
-//         --- @param obj GObject.Object
-//         --- @return boolean
-//         function Test.TestClass:is_type_of(obj) end
-//         return Test
-//         "###)
-//     }
-//
-//     fn gen_function(fun :&mut XMLElement) {
-//         fun.add_attribute("name", "testFunc");
-//         fun.add_attribute("c:identifier", "g_test");
-//
-//         let mut ret = XMLElement::new("return-value");
-//         ret.add_attribute("transfer-ownership", "none");
-//
-//         let mut params = XMLElement::new("parameters");
-//         let mut param = XMLElement::new("parameter");
-//         param.add_attribute("name", "num");
-//
-//         let mut typ = XMLElement::new("type");
-//         typ.add_attribute("name", "guint8");
-//         typ.add_attribute("c:type", "unsigned char*");
-//         param.add_child(typ);
-//         params.add_child(param);
-//         fun.add_child(params);
-//         fun.add_child(ret);
-//     }
-//
-//     
-//     #[test]
-//     pub fn test_functions() {
-//         let mut fun = XMLElement::new("function");
-//
-//         gen_function(&mut fun);
-//
-//         let code = parse_test(fun);
-//
-//         insta::assert_snapshot!(code, @r###"
-//         ---@diagnostic disable: unused-local, duplicate-doc-field
-//         ---@meta
-//         -- THIS FILE WAS GENERATED BY gir-to-stub! DO NOT MODIFY!
-//         local Test = {}
-//
-//         --- @param num number
-//         function Test.testFunc(num) end
-//
-//         return Test
-//         "###);
-//     }
-//
-//     #[test]
-//     pub fn test_callback() {
-//         let mut cb = XMLElement::new("callback");
-//         gen_function(&mut cb);
-//
-//         let code = parse_test(cb);
-//
-//         insta::assert_snapshot!(code, @r###"
-//         ---@diagnostic disable: unused-local, duplicate-doc-field
-//         ---@meta
-//         -- THIS FILE WAS GENERATED BY gir-to-stub! DO NOT MODIFY!
-//         local Test = {}
-//
-//         --- @alias Test.testFunc fun(num: number)
-//         return Test
-//         "###);
-//     }
-//
-//     #[test]
-//     pub fn test_enum() {
-//         let mut enu = XMLElement::new("enumeration");
-//         enu.add_attribute("name", "TestEnum");
-//         enu.add_attribute("c:type", "TestTestEnum");
-//         let mut member = XMLElement::new("member");
-//         member.add_attribute("name", "key");
-//         member.add_attribute("value", "3");
-//         enu.add_child(member);
-//
-//         let code = parse_test(enu);
-//         insta::assert_snapshot!(code, @r###"
-//         ---@diagnostic disable: unused-local, duplicate-doc-field
-//         ---@meta
-//         -- THIS FILE WAS GENERATED BY gir-to-stub! DO NOT MODIFY!
-//         local Test = {}
-//
-//         --- @enum Test.TestEnum
-//         Test.TestEnum = {
-//         	["KEY"] = 3,
-//         }
-//         return Test
-//         "###);
-//     }
-//
-//     #[test]
-//     pub fn test_record() {
-//     }
-//
-//     #[test]
-//     pub fn test_constant() {
-//         let mut constant = XMLElement::new("constant");
-//         constant.add_attribute("name", "MYCONSTANT");
-//         constant.add_attribute("c:type", "TEST_MYCONSTANT");
-//         constant.add_attribute("value", "555");
-//         let mut typ = XMLElement::new("type");
-//         typ.add_attribute("name", "gint");
-//         typ.add_attribute("c:tpe", "gint");
-//         constant.add_child(typ);
-//
-//         let code = parse_test(constant);
-//         insta::assert_snapshot!(code, @r###"
-//         ---@diagnostic disable: unused-local, duplicate-doc-field
-//         ---@meta
-//         -- THIS FILE WAS GENERATED BY gir-to-stub! DO NOT MODIFY!
-//         local Test = {}
-//
-//         Test.MYCONSTANT = 555
-//         return Test
-//         "###);
-//     }
-//
-//     #[test]
-//     pub fn test_bitfield() {
-//         let mut field = XMLElement::new("bitfield");
-//         field.add_attribute("name", "TestField");
-//         field.add_attribute("c:type", "TestTestField");
-//         let mut member = XMLElement::new("member");
-//         member.add_attribute("name", "key");
-//         member.add_attribute("value", "3");
-//         field.add_child(member);
-//
-//         let code = parse_test(field);
-//         insta::assert_snapshot!(code, @r###"
-//         ---@diagnostic disable: unused-local, duplicate-doc-field
-//         ---@meta
-//         -- THIS FILE WAS GENERATED BY gir-to-stub! DO NOT MODIFY!
-//         local Test = {}
-//
-//         --- @enum Test.TestField
-//         --- @overload fun({any}): Test.TestField
-//         Test.TestField = {
-//         	["KEY"] = 3,
-//         }
-//         return Test
-//         "###);
-//     }
-//
-//     #[test]
-//     pub fn test_alias() {
-//     }
-//
-//     #[test]
-//     pub fn test_unions() {
-//     }
-//
-//     #[test]
-//     pub fn test_boxed() {
-//     }
-//
-//     #[test]
-//     pub fn test_interfaces() {
-//     }
-// }

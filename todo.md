@@ -33,8 +33,13 @@
 - [ ] Add version
 - [ ] Major cleanup (mostly in xml parsing)
 
-
-
-
 --- 
 - [ ] Documentation on how to add a new language interface
+
+-- cleanup 
+--- gen_file_name instead of genfile. Creating a file is the same for every language
+--- we need a generate base class for all languages.
+--- generate_file should be a part of trait
+--- genfile -> generate (the whole generate all stuff needs to go away)
+
+--- all functions on LuaCodeGen

@@ -1,6 +1,7 @@
 use crate::library::*;
 use xmltree::Element;
 use core::fmt;
+use std::collections::HashSet;
 use std::io::Read;
 use std::str::FromStr;
 
@@ -229,18 +230,36 @@ fn read_param(e: &Element) -> Option<Parameter> {
     })
 }
 
+fn para_get_len(param: &Parameter) -> Option<usize> {
+    if let AnyType::Array(array) = &param.typ {
+        return array.length
+    }
+    None
+}
+
 fn read_params(e: &Element) -> Option<Vec<Parameter>> {
     let mut ret: Vec<Parameter> = vec![];
     let parameters = e.get_child("parameters")?;
 
+    let mut skip: HashSet<usize> = HashSet::new();
+    let mut num = 0;
     for parameter in parameters.children.iter() {
+        if skip.contains(&num) {
+            continue;
+        }
         if let Some(e) = parameter.as_element() {
             match e.name.as_ref() {
                 "parameter" | "instance-parameter" => {
                     let para = read_param(e);
                     if let Some(para) = para {
+                        if let Some(len) = para_get_len(&para) {
+                            skip.insert(len);
+                        }
                         ret.push(para);
                     }
+                    if e.name == "parameter" {
+                        num = num + 1;
+                    } 
                 },
                 _ => return None,
             }
