@@ -6,12 +6,6 @@ use anyhow::Result;
 
 use clap::Parser;
 
-#[derive(Clone)]
-enum Lang {
-    // Python,
-    Lua,
-}
-
 impl FromStr for Lang {
     type Err = String;
 
@@ -32,45 +26,43 @@ impl FromStr for Lang {
 #[clap(author, version, about, long_about = None)]
 struct Cli {
     #[clap(required = true)]
-    #[clap(short, long, value_name = "lua|python")]
+    // #[clap(short, long, value_name = "lua|python")]
+    #[clap(short, long, value_name = "lua")]
     lang: Lang,
 
-    // #[clap(long, value_name = "Code|CodeDoc|Full")]
-    #[clap(long, value_name = "Code")]
-    #[clap(default_value_t = lang::Level::Code)]
-    level: lang::Level,
+    /// directory to search for filename
+    #[clap(short, long, default_value = "/usr/share/gir-1.0/")]
+    dir: String,
 
-    // generates all files found in "/usr/share/gir-1.0/" but overrides if file is 
-    // found locally.
-    #[clap(long)]
-    #[clap(default_value_t = false)]
-    gen_all: bool,
+    /// gir filename, will search /usr/share/gir-1.0/
+    #[clap(required = true)]
+    gir_file: String,
 
-    #[clap(short, long)]
+    /// directory to generate the bindings to
     #[clap(required = true)]
     output: String,
-
-    #[clap(required = true)]
-    filename: String,
-
 }
 
-fn get_lang(lang: Lang) -> Box<dyn lang::Generator> {
-    match lang {
-        // Lang::Python => {
-        //     Box::new(lang::python::PythonCodeGen::new())
-        // }
-        Lang::Lua => {
-            Box::new(lang::lua::LuaCodegen::new())
-        },
+impl Cli {
+    fn gen(&self) -> Result<()> {
+        match self.lang {
+            Lang::Lua => {
+                let cg = lang::lua::LuaCodegen::new(&self.gir_file, &self.dir, &self.output)?;
+                cg.generate()
+            }
+        }
     }
+}
+
+#[derive(Clone)]
+enum Lang {
+    // Python,
+    Lua,
 }
 
 // a bit much copy-pasty
 fn main() -> Result<()>{
     let args = Cli::parse();
-    let cg = get_lang(args.lang);
-        cg.generate(&args.filename, &args.output)?;
-    }
+    args.gen()?;
     Ok(())
 }

@@ -1,5 +1,3 @@
-// TODO Fix version to Version in structs
-
 #[derive(Debug)]
 pub struct Version(pub u16, pub u16, pub u16);
 

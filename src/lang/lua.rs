@@ -7,36 +7,11 @@ use std::path::{Path, PathBuf};
 use super::*;
 use anyhow::{Result, Context};
 
-// The amount of code/doc we should generate
-// Generating full docs for a mock file could be
-// a bit to much for a lsp.
-
-// struct LuaDoc {}
 pub struct LuaCodegen {
     gir: PathBuf,
-    dir: PathBuf,
-    dirname: String,
-}
-
-// impl LuaCodegen {
-    // pub fn new() -> LuaCodegen {
-    //     LuaCodegen{}
-    // }
-// }
-
-// impl Default for LuaCodegen {
-//     fn default() -> Self {
-//         Self::new()
-//     }
-// }
-
-impl LuaCodegen {
-    fn gen<R: Read>(&self, r: R,  dir: &str, p: &Path) -> Result<()> {
-        let repo = parse::parse_gir(r).expect("Couldn't parse gir file");
-
-        repo.namespace[0].gen(dir, p)?;
-        Ok(())
-    }
+    output_dir: PathBuf, // this is the path directory we create the files to
+    module_name: String, // this is used to generate require(module_name/buffer from the namespace)
+    gobject_dir: PathBuf, // this is the path directory we create the files to
 }
 
 fn fix_filename(str: &str) -> String {
@@ -48,42 +23,71 @@ fn fix_filename(str: &str) -> String {
 }
 
 impl LuaCodegen {
-    fn new(filename: &str, output_dir: &str) -> Result<Self> {
-        let path = Path::new(filename).to_owned();
+    pub fn new(gir_name: &str, dir: &str, output_dir: &str) -> Result<Self> {
+        let path = Path::new(gir_name).to_owned();
 
         if path.extension() != Some(OsStr::new("gir")) {
             return Err(anyhow::anyhow!(format!("{} Filetype isn't gir", path.to_string_lossy())))
         }
+
+        let gir = get_gir(&path, dir)?;
+
         let file = path.file_stem().ok_or_else(|| 
             anyhow::anyhow!(format!("Cannot get filename for outputwriter")))?;
-        let file = fix_filename(file.to_str().ok_or_else(||
+        let module_name = fix_filename(file.to_str().ok_or_else(||
             anyhow::anyhow!(format!("Cannot convert filename")))?);
+
+        let gobject_dir = Path::new(output_dir).to_owned();
+        let gobject_dir = gobject_dir.join("GObject").join("GObject");
 
         let output_dir = Path::new(output_dir);
 
-        let output_dir = output_dir.join(&file).join(&file);
+        // We join the file twice, this makes it easier for the lsp.
+        // The first is to seperatate it from the other girs and the
+        // second level is to load it like a module.
+        let output_dir = output_dir.join(&module_name).join(&module_name);
 
-        let gir = get_gir(path)?;
-
-        Ok(LuaCodegen { dirname: file, gir, dir: output_dir })
+        Ok(LuaCodegen { 
+            module_name,
+            gir,
+            output_dir,
+            gobject_dir,
+        })
     }
 
-    fn generate(&self, filename: &str) -> Result<()> {
-        self.generate_gobject()?;
-
+    pub fn generate(&self) -> Result<()> {
         let gir_file = open_gir(&self.gir)?;
         let repo = parse::parse_gir(gir_file)?;
 
-        repo.namespace[0].gen(&self.dirname, &self.dir)?;
+        fs::create_dir_all(&self.output_dir)?;
+
+        self.generate_gobject()?;
+
+        repo.namespace[0].gen(&self)?;
         Ok(())
     }
 
-    fn generate_gobject<>(&self) -> Result<()> {
-        let path = self.dir.join("init.lua");
-        let mut w = fs::File::create(path)?;
+    fn generate_gobject(&self) -> Result<()> {
+        fs::create_dir_all(&self.gobject_dir)?;
+        let mut w = gen_file("init", &self.gobject_dir)?;
+
 
         writeln!(w, "--- @class GObject.Object")?;
         writeln!(w, "local Object = {{}}")?;
+
+
+        // - `NONE`, `INTERFACE`, `CHAR`, `UCHAR`, `BOOLEAN`,
+        // `INT`, `UINT`, `LONG`, `ULONG`, `INT64`, `UINT64`,
+        // `ENUM`, `FLAGS`, `FLOAT`, `DOUBLE`, `STRING`,
+        // `POINTER`, `BOXED`, `PARAM`, `OBJECT`, `VARIANT`
+        
+        // - `parent`, `depth`, `next_base`, `is_a`, `children`, `interfaces`,
+        // is_type_of(?)
+        //   `query`, `fundamental_next`, `fundamental`
+        writeln!(w, "--- @class GObject.Type")?;
+        writeln!(w, "--- @class GObject.Value")?;
+
+        writeln!(w, "--- @class GObject.Glosure")?;
 
         Ok(())
     }
@@ -113,9 +117,9 @@ fn gen_file(ns: &str, p: &Path) -> Result<BufWriter<File>> {
 }
 
 impl Namespace {
-    pub fn gen(&self, dirname: &str, dir: &Path) -> Result<()> {
+    pub fn gen(&self, cg: &LuaCodegen) -> Result<()> {
         let name = self.name.as_ref().context("Failed to read name")?;
-        let mut w = gen_file("init", dir)?;
+        let mut w = gen_file("init", &cg.output_dir)?;
         writeln!(w, "local {} = {{}}\n", name)?;
 
         for types in self.record.iter() {
@@ -129,17 +133,17 @@ impl Namespace {
         }
         writeln!(w)?;
         for class in self.classes.iter() {
-            writeln!(w, "local _{} = require('{}.{}')", class.name, dirname, class.name)?;
+            writeln!(w, "local _{} = require('{}.{}')", class.name, cg.module_name, class.name)?;
             writeln!(w, "{}.{} = _{}\n", name, class.name, class.name)?;
-            class.gen(name, dir)?;
+            class.gen(name, &cg.output_dir)?;
         }
         for record in self.record.iter() {
             if record.name.ends_with("Class") {
                 continue;
             }
-            writeln!(w, "local _{} = require('{}.{}')", record.name, dirname, record.name)?;
+            writeln!(w, "local _{} = require('{}.{}')", record.name, cg.module_name, record.name)?;
             writeln!(w, "{}.{} = _{}\n", name, record.name, record.name)?;
-            record.gen(name, dir)?;
+            record.gen(name, &cg.output_dir)?;
         }
         // section!(&mut w, self, name, record);
 

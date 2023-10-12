@@ -56,14 +56,12 @@ pub trait Generator {
     // }
 }
 
-fn get_gir(filename: PathBuf) -> Result<PathBuf> {
+fn get_gir(filename: &PathBuf, dir: &str) -> Result<PathBuf> {
     if filename.exists() {
-        Ok(filename)
+        Ok(filename.clone())
     }  else {
-        // Path::new("/usr/share/gir-1.0/").join(filename)
-        let path = Path::new("/usr/share/gir-1.0/").join(filename);
+        let path = Path::new(dir).join(filename);
         if !path.exists() {
-            // return Err(anyhow::anyhow!(format!("No gir with name: {} found", filename.to_str())))
             return Err(anyhow::anyhow!(format!("No gir with name: found")))
         }
         Ok(path)
