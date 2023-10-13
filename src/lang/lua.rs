@@ -75,6 +75,10 @@ impl LuaCodegen {
         writeln!(w, "--- @class GObject.Object")?;
         writeln!(w, "local Object = {{}}")?;
 
+        // _parent
+        // add is_type_of
+        // add derive
+        // ._type
 
         // - `NONE`, `INTERFACE`, `CHAR`, `UCHAR`, `BOOLEAN`,
         // `INT`, `UINT`, `LONG`, `ULONG`, `INT64`, `UINT64`,
@@ -174,7 +178,7 @@ fn gen_default_construtor<W:Write>(ns: &str, constrs: &[Function], w: &mut W) ->
     for constr in constrs {
         if constr.name == "new" {
             if let Some(ret) = gen_return_names_typed(constr, ns) {
-                writeln!(w, "--- @overload fun(params: {{}}):{}", ret)?;
+                writeln!(w, "--- @overload fun(params: table|nil):{}", ret)?;
             }
             return Ok(())
         }
@@ -227,11 +231,11 @@ impl Class {
         }
         // TODO: Should we re-add this in some way?
 
-        // if !self.virtual_method.is_empty() {
-        //     for virt in self.virtual_method.iter() {
-        //         virt.gen_method(&self.name, ns, &mut w)?;
-        //     }
-        // }
+        if !self.virtual_method.is_empty() {
+            for virt in self.virtual_method.iter() {
+                virt.gen_virtual(&self.name, ns, &mut w)?;
+            }
+        }
         for callback in self.callbacks.iter() {
             callback.gen(&self.name, ns, &mut w)?;
         }
@@ -629,6 +633,11 @@ impl Function {
                 writeln!(w, "function {}.{}({}) end\n", &ns, self.name, param_names)?;
             },
         }
+        Ok(())
+    }
+    pub fn gen_virtual<W: Write>(&self, ns: &str, root_ns: &str, w: &mut W) -> Result<()> {
+        let virtual_ns = format!("do_{}", ns);
+        self.gen(&virtual_ns, root_ns, w)?;
         Ok(())
     }
     pub fn gen_callback_type<W: Write>(&self, ns: &str, w: &mut W) -> Result<()> {
